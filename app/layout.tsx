@@ -6,8 +6,8 @@ import { Navbar } from "@/components/navbar"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "CertiKey - 房屋租賃平台",
-  description: "尋找您的理想住宿",
+  title: "CertiKey - 數位憑證智慧鑰匙",
+  description: "整合 TW DIW 與智能門鎖的新世代住宿管理系統",
   generator: "v0.app",
   icons: {
     icon: "/certikey-logo.png",

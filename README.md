@@ -1,30 +1,67 @@
-# Airbnb like platform
+# CertiKey
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+![CertiKey Logo](/public/certikey-logo.png)
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/sparks-projects-c2c38b36/v0-certi-key)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/qtySUjVfpKZ)
+**數位憑證智慧鑰匙** - 整合 TW DIW 與智能門鎖的新世代住宿管理系統
 
-## Overview
+## 🌐 Demo 網址
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+**[https://v0-certi-key.vercel.app/](https://v0-certi-key.vercel.app/)**
 
-## Deployment
+## ✨ 核心功能
 
-Your project is live at:
+### 🔐 數位身分憑證 (TW DIW)
 
-**[https://vercel.com/sparks-projects-c2c38b36/v0-certi-key](https://vercel.com/sparks-projects-c2c38b36/v0-certi-key)**
+- 整合台灣數位身分錢包 (Taiwan Digital Identity Wallet)
+- 支援可驗證憑證 (Verifiable Credentials)
+- 去中心化身分驗證機制
 
-## Build your app
+### 🚪 智能門鎖系統
 
-Continue building your app on:
+- 數位房卡功能，無需實體鑰匙
+- QR Code 快速開門
+- 門鎖存取記錄追蹤
+- 智能門鎖 Demo 展示
 
-**[https://v0.app/chat/qtySUjVfpKZ](https://v0.app/chat/qtySUjVfpKZ)**
+### 🏠 住宿管理
 
-## How It Works
+- 房源搜尋與瀏覽
+- 線上預訂系統
+- 房客與房東雙角色切換
+- 預訂記錄管理
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+### 💳 會員系統
+
+- 數位會員卡
+- 個人資料管理
+
+### 📱 共享房卡
+
+- 房卡分享功能
+- 多人協作入住
+- 權限控制
+
+## 🧪 測試帳號
+
+以下測試帳號已完整設置（包含 Auth、Profile、電話、身分證）：
+
+### 房客帳號
+
+| 姓名 | Email | 密碼 | 電話 | 身分證字號 |
+|------|-------|------|------|-----------|
+| 測試房客1 | `guest1@demo.com` | `demo123456` | 0912345678 | A123456789 |
+| 測試房客2 | `guest2@demo.com` | `demo123456` | 0923456789 | B234567890 |
+| 王小明 | `guest3@demo.com` | `demo123456` | 0945678901 | D456789012 |
+| 李小華 | `guest4@demo.com` | `demo123456` | 0956789012 | E567890123 |
+
+### 房東帳號
+
+| 姓名 | Email | 密碼 | 電話 | 身分證字號 |
+|------|-------|------|------|-----------|
+| 測試房東1 | `host1@demo.com` | `demo123456` | 0934567890 | C345678901 |
+| 張大房東 | `host2@demo.com` | `demo123456` | 0967890123 | F678901234 |
+
+> 💡 **提示**:
+>
+> - 所有測試帳號的密碼都是 `demo123456`
+> - Email 已自動驗證，可直接登入

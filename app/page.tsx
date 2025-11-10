@@ -63,7 +63,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-semibold">安全保障</h3>
                 <p className="text-pretty leading-relaxed text-muted-foreground">
-                  完善的支付系統和數位房卡，確保您的住宿安全
+                  採用 TW DIW 數位身分憑證，確保您的身分與住宿安全
                 </p>
               </CardContent>
             </Card>

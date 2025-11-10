@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* 更新配色方案以適合房屋租賃平台 */
+  /* CertiKey - 數位憑證智慧鑰匙平台 */
   --background: oklch(0.99 0 0);
   --foreground: oklch(0.15 0 0);
   --card: oklch(1 0 0);
