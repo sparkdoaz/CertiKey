@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import Image from "next/image"
-import { getPropertyById } from "@/lib/mock-data"
+// import { getPropertyById } from "@/lib/mock-data" // 註解掉 mock 資料
+import { getProperty } from "@/lib/supabase-queries" // 使用 Supabase 查詢
 import { BookingForm } from "@/components/booking-form"
 import { Separator } from "@/components/ui/separator"
 import { Star, MapPin, Users, Bed, Bath, Wifi, Wind, Tv, Car } from "lucide-react"
@@ -12,12 +13,13 @@ const amenityIcons: Record<string, any> = {
   停車場: Car,
 }
 
-export default function PropertyDetailPage({
+export default async function PropertyDetailPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  const property = getPropertyById(params.id)
+  const { id } = await params
+  const property = await getProperty(id)
 
   if (!property) {
     notFound()
@@ -55,7 +57,7 @@ export default function PropertyDetailPage({
               priority
             />
           </div>
-          {property.images.slice(1).map((image, index) => (
+          {(property.images || []).slice(1).map((image: string, index: number) => (
             <div key={index} className="relative aspect-[4/3] overflow-hidden rounded-lg">
               <Image
                 src={image || "/placeholder.svg"}
@@ -73,15 +75,12 @@ export default function PropertyDetailPage({
             {/* Host Info */}
             <div className="mb-6">
               <h2 className="mb-2 text-2xl font-semibold">
-                由 {property.hostName} 出租的 {property.type === "apartment" && "公寓"}
-                {property.type === "house" && "別墅"}
-                {property.type === "villa" && "豪華別墅"}
-                {property.type === "studio" && "工作室"}
+                由 {property.host?.name || '房東'} 出租的房源
               </h2>
               <div className="flex items-center gap-4 text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Users className="h-4 w-4" />
-                  <span>{property.guests} 位房客</span>
+                  <span>{property.max_guests} 位房客</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Bed className="h-4 w-4" />
@@ -108,7 +107,7 @@ export default function PropertyDetailPage({
             <div className="mb-6">
               <h3 className="mb-4 text-xl font-semibold">設施與服務</h3>
               <div className="grid gap-3 sm:grid-cols-2">
-                {property.amenities.map((amenity) => {
+                {(property.amenities || []).map((amenity: string) => {
                   const Icon = amenityIcons[amenity]
                   return (
                     <div key={amenity} className="flex items-center gap-3">

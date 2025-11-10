@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Clock, Lock, LockOpen, AlertCircle, CheckCircle, Smartphone, MapPin } from "lucide-react"
-import { mockDoorAccessLogs } from "@/lib/mock-data"
+// import { mockDoorAccessLogs } from "@/lib/mock-data" // 註解掉 mock 資料
+import { getDoorAccessLogs } from "@/lib/supabase-queries" // 使用 Supabase 查詢
 
 interface DoorAccessLogsProps {
   bookingId: string
@@ -15,24 +16,41 @@ interface DoorAccessLogsProps {
 
 export function DoorAccessLogs({ bookingId, viewMode = "guest" }: DoorAccessLogsProps) {
   const [logs, setLogs] = useState<DoorAccessLog[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get logs from localStorage or use mock data
-    const storedLogs = localStorage.getItem("doorAccessLogs")
-    let allLogs: DoorAccessLog[] = []
+    async function loadDoorAccessLogs() {
+      try {
+        setLoading(true)
+        // 從 Supabase 載入開門記錄
+        const { getDoorAccessLogsByBooking } = await import('@/lib/supabase-queries')
+        const data = await getDoorAccessLogsByBooking(bookingId)
 
-    if (storedLogs) {
-      allLogs = JSON.parse(storedLogs)
-    } else {
-      allLogs = mockDoorAccessLogs
-      localStorage.setItem("doorAccessLogs", JSON.stringify(mockDoorAccessLogs))
+        // 轉換資料格式
+        const formattedLogs: DoorAccessLog[] = (data || []).map(log => ({
+          id: log.id,
+          bookingId: log.booking_id,
+          userId: log.user_id,
+          propertyId: log.property_id,
+          timestamp: new Date(log.access_time),
+          accessType: log.access_type as "entry" | "exit",
+          accessMethod: log.access_method as "qr-code" | "digital-key" | "physical-key",
+          status: log.status as "success" | "failed" | "denied",
+          location: log.location,
+          deviceId: log.device_id,
+          userName: log.user?.name
+        }))
+
+        setLogs(formattedLogs)
+      } catch (error) {
+        console.error('載入開門紀錄失敗:', error)
+        setLogs([])
+      } finally {
+        setLoading(false)
+      }
     }
 
-    // Filter logs for this booking
-    const bookingLogs = allLogs.filter((log) => log.bookingId === bookingId)
-    // Sort by timestamp descending
-    bookingLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    setLogs(bookingLogs)
+    loadDoorAccessLogs()
   }, [bookingId])
 
   const formatTimestamp = (date: Date) => {
@@ -70,7 +88,11 @@ export function DoorAccessLogs({ bookingId, viewMode = "guest" }: DoorAccessLogs
         <CardDescription>{viewMode === "guest" ? "查看您的開門歷史紀錄" : "查看房客的開門歷史紀錄"}</CardDescription>
       </CardHeader>
       <CardContent>
-        {logs.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <p className="text-muted-foreground">載入中...</p>
+          </div>
+        ) : logs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Lock className="mb-4 h-12 w-12 text-muted-foreground" />
             <p className="text-muted-foreground">尚無開門紀錄</p>
@@ -84,11 +106,10 @@ export function DoorAccessLogs({ bookingId, viewMode = "guest" }: DoorAccessLogs
                   className="flex items-start gap-4 rounded-lg border p-4 transition-colors hover:bg-secondary/50"
                 >
                   <div
-                    className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${
-                      log.status === "success"
-                        ? "bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400"
-                        : "bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400"
-                    }`}
+                    className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${log.status === "success"
+                      ? "bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400"
+                      : "bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400"
+                      }`}
                   >
                     {log.action === "unlock" ? <LockOpen className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
                   </div>

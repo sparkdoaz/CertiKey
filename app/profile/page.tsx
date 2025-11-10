@@ -15,7 +15,7 @@ import { User, Phone, CreditCard, CheckCircle2, Shield } from "lucide-react"
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, updateProfile } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [showDigitalVerification, setShowDigitalVerification] = useState(false)
   const [formData, setFormData] = useState({
@@ -42,38 +42,56 @@ export default function ProfilePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Update user in localStorage
-    const updatedUser = {
-      ...user,
-      name: formData.name,
-      phone: formData.phone,
-      nationalId: formData.nationalId,
+    if (!user) {
+      alert('用戶資料不存在，請重新登入')
+      router.push("/login")
+      return
     }
 
-    localStorage.setItem("user", JSON.stringify(updatedUser))
+    setIsLoading(true)
 
-    // Update auth context (you might need to add an update method to AuthContext)
-    window.location.reload()
+    try {
+      // 使用 AuthContext 的 updateProfile 方法更新用戶資料
+      await updateProfile({
+        name: formData.name,
+        phone: formData.phone,
+        nationalId: formData.nationalId,
+      })
 
-    setIsLoading(false)
+      alert('資料已成功更新！')
+
+    } catch (error) {
+      console.error('更新用戶資料時發生錯誤:', error)
+      alert('更新失敗，請稍後再試')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleDigitalVerification = (nationalId: string) => {
+  const handleDigitalVerification = async (nationalId: string) => {
+    if (!user) {
+      alert('用戶資料不存在，請重新登入')
+      router.push("/login")
+      return
+    }
+
     setFormData((prev) => ({ ...prev, nationalId }))
     setShowDigitalVerification(false)
 
-    // Update user with verified status
-    const updatedUser = {
-      ...user,
-      nationalId,
-      nationalIdVerified: true,
+    try {
+      // 使用 AuthContext 的 updateProfile 方法更新數位驗證資料
+      await updateProfile({
+        nationalId,
+        nationalIdVerified: true,
+      })
+
+      alert('數位驗證已成功完成！')
+
+    } catch (error) {
+      console.error('更新數位驗證資料時發生錯誤:', error)
+      alert('數位驗證更新失敗，請稍後再試')
     }
-    localStorage.setItem("user", JSON.stringify(updatedUser))
   }
 
   if (!user) {

@@ -1,6 +1,10 @@
 import type { Property } from "@/types/property"
 import type { DoorAccessLog } from "@/types/door-access-log"
 
+// 注意：此檔案的 Mock 資料已被 Supabase 真實資料取代
+// 已在專案中註解掉所有使用 mock 資料的地方，改用 Supabase 查詢
+// 這些資料僅作為參考或緊急備用
+
 export const mockProperties: Property[] = [
   {
     id: "1",

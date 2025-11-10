@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { Booking } from "@/types/booking"
+import type { CertificateResponse } from "@/types/digital-certificate"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
@@ -14,8 +15,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Calendar, Users, AlertTriangle, CheckCircle2, XCircle } from "lucide-react"
+import { Calendar, Users, AlertTriangle, CheckCircle2, XCircle, Download } from "lucide-react"
 import QRCode from "qrcode"
+import { supabase } from "@/lib/supabase"
 
 interface DigitalRoomCardProps {
   booking: Booking
@@ -23,11 +25,14 @@ interface DigitalRoomCardProps {
 
 export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null)
+  const [transactionId, setTransactionId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
   const [errorDialog, setErrorDialog] = useState<{
     open: boolean
     title: string
     description: string
-    type: "expired" | "used" | "invalid" | null
+    type: "expired" | "used" | "invalid" | "error" | null
   }>({
     open: false,
     title: "",
@@ -36,11 +41,136 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
   })
   const [qrCodeStatus, setQrCodeStatus] = useState<"valid" | "used" | "expired" | "not-ready">("valid")
 
+  // QR Code 倒數計時 (5 分鐘 = 300 秒)
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
+  const [vcStatus, setVcStatus] = useState<"pending" | "claimed" | null>(null)
+
+  // 用於存儲 timer 和 polling interval 的 ref
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 清理 timer 和 polling interval
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current)
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [])
+
+  // 倒數計時 effect
+  useEffect(() => {
+    if (timeRemaining === null) return
+
+    if (timeRemaining <= 0) {
+      // 時間到,停止輪詢
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+      setTimeRemaining(null)
+
+      // 如果還沒被掃描,顯示過期訊息
+      if (vcStatus === 'pending') {
+        setErrorDialog({
+          open: true,
+          title: "QR Code 已過期",
+          description: "QR Code 5 分鐘有效期限已過,請重新領取房卡",
+          type: "expired",
+        })
+        // 清空 QR Code
+        setQrCodeData(null)
+        setTransactionId(null)
+        setVcStatus(null)
+      }
+      return
+    }
+
+    // 啟動倒數計時
+    countdownTimerRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev === null || prev <= 0) return null
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current)
+      }
+    }
+  }, [timeRemaining, vcStatus])
+
+  // 查詢 VC 狀態
+  const queryVcStatus = async (txId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      const response = await fetch(`/api/digital-certificate/status/${txId}`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('VC Status:', result)
+
+        // 檢查狀態
+        if (result.status === 'claimed' || result.vc_status?.credential) {
+          // 已被掃描!
+          setVcStatus('claimed')
+
+          // 停止輪詢和倒數
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+            pollingIntervalRef.current = null
+          }
+          if (countdownTimerRef.current) {
+            clearInterval(countdownTimerRef.current)
+            countdownTimerRef.current = null
+          }
+          setTimeRemaining(null)
+
+          // 顯示成功訊息
+          setErrorDialog({
+            open: true,
+            title: "房卡已領取",
+            description: "您的數位房卡已成功領取,可以在專屬 App 中查看並使用",
+            type: "used",
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to query VC status:', error)
+    }
+  }
+
+  // 開始輪詢 VC 狀態
+  const startPollingVcStatus = (txId: string) => {
+    // 清除舊的 polling interval (如果有)
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
+    // 立即查詢一次
+    queryVcStatus(txId)
+
+    // 每 5 秒查詢一次
+    pollingIntervalRef.current = setInterval(() => {
+      queryVcStatus(txId)
+    }, 5000)
+  }
+
   useEffect(() => {
     const checkQRCodeValidity = () => {
       const now = new Date()
-      const checkInDate = new Date(booking.checkIn)
-      const checkOutDate = new Date(booking.checkOut)
+      const checkInDate = new Date(booking.checkIn || booking.check_in_date)
+      const checkOutDate = new Date(booking.checkOut || booking.check_out_date)
 
       // QRCode 在入住日期前 24 小時開始有效
       const validFromDate = new Date(checkInDate.getTime() - 24 * 60 * 60 * 1000)
@@ -88,49 +218,149 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
     checkQRCodeValidity()
   }, [booking])
 
-  useEffect(() => {
-    if (canvasRef.current && qrCodeStatus === "valid") {
-      const qrData = JSON.stringify({
-        bookingId: booking.id,
-        propertyId: booking.propertyId,
-        userId: booking.userId,
-        checkIn: booking.checkIn,
-        checkOut: booking.checkOut,
-        timestamp: new Date().toISOString(),
-      })
+  // 領取房卡 - 調用 API 獲取 QR Code
+  const handleClaimCard = async () => {
+    setIsLoading(true)
+    try {
+      // 獲取當前用戶的 session token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-      QRCode.toCanvas(canvasRef.current, qrData, {
-        width: 256,
-        margin: 2,
-        color: {
-          dark: "#000000",
-          light: "#FFFFFF",
-        },
-      })
-    }
-  }, [booking, qrCodeStatus])
-
-  const handleSimulateUsage = () => {
-    const bookings = JSON.parse(localStorage.getItem("bookings") || "[]")
-    const updatedBookings = bookings.map((b: Booking) => {
-      if (b.id === booking.id) {
-        return {
-          ...b,
-          qrCodeStatus: "used",
-          qrCodeUsedAt: new Date().toISOString(),
-        }
+      if (sessionError || !session) {
+        throw new Error("請先登入")
       }
-      return b
-    })
-    localStorage.setItem("bookings", JSON.stringify(updatedBookings))
 
-    setQrCodeStatus("used")
-    setErrorDialog({
-      open: true,
-      title: "QR Code 已被使用",
-      description: `此 QR Code 已於 ${new Date().toLocaleString("zh-TW")} 被掃描使用，無法再次使用。`,
-      type: "used",
-    })
+      // 準備 API 請求數據 - 只傳送 booking ID，敏感資料由後端處理
+      const requestData = {
+        bookingId: booking.id
+      }
+
+      // 調用 API - 帶上 Authorization header 進行身份驗證
+      const response = await fetch('/api/digital-certificate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(requestData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        console.error('API Error:', error)
+
+        // 顯示詳細的錯誤訊息
+        let errorMessage = error.message || '領取房卡失敗'
+
+        // 如果有 details,附加到錯誤訊息中
+        if (error.details) {
+          if (Array.isArray(error.details)) {
+            // 欄位驗證錯誤
+            errorMessage += '\n\n' + error.details.join('\n')
+          } else if (typeof error.details === 'object') {
+            // 其他詳細錯誤
+            errorMessage += '\n\n' + JSON.stringify(error.details, null, 2)
+          }
+        }
+
+        throw new Error(errorMessage)
+      }
+
+      const data: CertificateResponse = await response.json()
+
+      // 印出 transactionId
+      console.log('Certificate Transaction ID:', data.transactionId)
+      console.log('Full Response:', {
+        transactionId: data.transactionId,
+        hasQrCode: !!data.qrCode,
+        hasDeepLink: !!data.deepLink,
+        qrCodeLength: data.qrCode?.length,
+        deepLinkLength: data.deepLink?.length
+      })
+
+      // 儲存 transactionId 以便後續查詢 VC 狀態
+      setTransactionId(data.transactionId)
+
+      // 保存 QR Code 數據
+      // qrCode 是 Base64 圖片(已經生成好的),優先使用
+      // deepLink 是純文字 URL,如果沒有 qrCode 才使用
+      setQrCodeData(data.qrCode || data.deepLink)
+
+      // 啟動 5 分鐘倒數計時
+      setTimeRemaining(300) // 300 秒 = 5 分鐘
+      setVcStatus('pending')
+
+      // 開始輪詢 VC 狀態
+      startPollingVcStatus(data.transactionId)
+
+    } catch (error) {
+      console.error('Failed to claim room card:', error)
+
+      // 將錯誤訊息中的換行符號轉為 <br/>
+      const errorMsg = error instanceof Error ? error.message : "領取房卡時發生錯誤，請稍後再試"
+
+      setErrorDialog({
+        open: true,
+        title: "領取失敗",
+        description: errorMsg,
+        type: "error",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // API 已經回傳完整的 QR Code 圖片(Base64),不需要再次生成
+  // 如果 qrCode 是 Base64 圖片,就直接使用;如果是 deepLink 純文字,則需要生成
+  useEffect(() => {
+    if (canvasRef.current && qrCodeData && qrCodeStatus === "valid") {
+      // 檢查是否為 Base64 圖片 (data:image/ 開頭)
+      if (qrCodeData.startsWith('data:image/')) {
+        // 這是 Base64 圖片,直接顯示在 img 元素上
+        console.log('QR Code is a Base64 image, no need to regenerate');
+      } else {
+        // 這是純文字 URL (deepLink),需要生成 QR Code
+        console.log('Generating QR Code from text:', qrCodeData.substring(0, 100));
+        QRCode.toCanvas(canvasRef.current, qrCodeData, {
+          width: 256,
+          margin: 2,
+          errorCorrectionLevel: 'L',
+          color: {
+            dark: "#000000",
+            light: "#FFFFFF",
+          },
+        }).catch(err => {
+          console.error('Failed to generate QR code:', err);
+          setErrorDialog({
+            open: true,
+            title: "QR Code 生成失敗",
+            description: `無法生成 QR Code。請聯繫客服處理。`,
+            type: "error",
+          });
+        })
+      }
+    }
+  }, [qrCodeData, qrCodeStatus])
+
+  const handleSimulateUsage = async () => {
+    try {
+      // 使用 Supabase 更新訂單狀態
+      const { updateBooking } = await import('@/lib/supabase-queries')
+      await updateBooking(booking.id, {
+        qr_code_status: 'used',
+        qr_code_used_at: new Date().toISOString()
+      })
+
+      setQrCodeStatus("used")
+      setErrorDialog({
+        open: true,
+        title: "QR Code 已被使用",
+        description: `此 QR Code 已於 ${new Date().toLocaleString("zh-TW")} 被掃描使用，無法再次使用。`,
+        type: "used",
+      })
+    } catch (error) {
+      console.error('Failed to update booking:', error)
+      alert('更新失敗，請稍後再試')
+    }
   }
 
   const getStatusBadge = () => {
@@ -166,6 +396,13 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
     }
   }
 
+  // 格式化倒數時間
+  const formatTimeRemaining = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
   return (
     <>
       <Card className="overflow-hidden">
@@ -177,13 +414,52 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
           <p className="text-center text-sm text-primary-foreground/90">
             {qrCodeStatus === "valid" ? "請使用專屬 App 掃描此 QR Code" : "此 QR Code 目前無法使用"}
           </p>
+          {/* 倒數計時顯示 */}
+          {timeRemaining !== null && vcStatus === 'pending' && (
+            <div className="mt-2 text-center">
+              <p className="text-xs text-primary-foreground/80">
+                有效期限剩餘: <span className="font-mono font-semibold">{formatTimeRemaining(timeRemaining)}</span>
+              </p>
+            </div>
+          )}
+          {vcStatus === 'claimed' && (
+            <div className="mt-2 text-center">
+              <p className="text-xs text-green-200 font-medium">
+                ✓ 房卡已成功領取
+              </p>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-6 p-6">
           {/* QR Code */}
           <div className="flex justify-center">
             <div className="rounded-lg bg-white p-4 shadow-lg">
-              {qrCodeStatus === "valid" ? (
-                <canvas ref={canvasRef} className="h-64 w-64" />
+              {!qrCodeData ? (
+                <div className="flex h-64 w-64 items-center justify-center bg-gray-50">
+                  <div className="text-center space-y-4">
+                    <Download className="mx-auto h-16 w-16 text-gray-400" />
+                    <p className="text-sm text-gray-500">尚未領取房卡</p>
+                    <Button
+                      onClick={handleClaimCard}
+                      disabled={isLoading || qrCodeStatus !== "valid"}
+                      className="mt-2"
+                    >
+                      {isLoading ? "領取中..." : "領取房卡"}
+                    </Button>
+                  </div>
+                </div>
+              ) : qrCodeStatus === "valid" ? (
+                qrCodeData.startsWith('data:image/') ? (
+                  // Base64 圖片,直接顯示
+                  <img
+                    src={qrCodeData}
+                    alt="Digital Room Card QR Code"
+                    className="h-64 w-64"
+                  />
+                ) : (
+                  // 純文字 URL,使用 Canvas 生成
+                  <canvas ref={canvasRef} className="h-64 w-64" />
+                )
               ) : (
                 <div className="flex h-64 w-64 items-center justify-center bg-gray-100">
                   <div className="text-center">
@@ -210,10 +486,12 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
                 <div>
                   <p className="font-medium">入住時間</p>
                   <p className="text-muted-foreground">
-                    {new Date(booking.checkIn).toLocaleDateString("zh-TW", {
+                    {booking.checkIn && new Date(booking.checkIn).toLocaleString("zh-TW", {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
                     })}
                   </p>
                 </div>
@@ -224,10 +502,12 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
                 <div>
                   <p className="font-medium">退房時間</p>
                   <p className="text-muted-foreground">
-                    {new Date(booking.checkOut).toLocaleDateString("zh-TW", {
+                    {booking.checkOut && new Date(booking.checkOut).toLocaleString("zh-TW", {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
                     })}
                   </p>
                 </div>
@@ -247,7 +527,13 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
 
           {/* Instructions */}
           <div className="rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
-            {qrCodeStatus === "valid" ? (
+            {!qrCodeData ? (
+              <>
+                <p className="font-medium">請點擊上方按鈕領取數位房卡</p>
+                <p className="mt-1">領取後即可使用專屬 App 掃描 QR Code</p>
+                <p className="mt-2 text-xs">QR Code 將於退房日期後自動失效</p>
+              </>
+            ) : qrCodeStatus === "valid" ? (
               <>
                 <p className="font-medium">請使用專屬 App 掃描 QR Code 以獲取房卡</p>
                 <p className="mt-1">掃描後即可在 App 中查看並使用數位房卡</p>
@@ -261,7 +547,7 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
             )}
           </div>
 
-          {qrCodeStatus === "valid" && (
+          {qrCodeStatus === "valid" && qrCodeData && (
             <div className="rounded-lg border border-dashed border-muted-foreground/30 p-4">
               <p className="mb-2 text-center text-xs text-muted-foreground">測試功能</p>
               <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={handleSimulateUsage}>

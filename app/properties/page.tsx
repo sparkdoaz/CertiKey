@@ -1,56 +1,19 @@
-"use client"
+import { getProperties } from "@/lib/supabase-queries" // 使用 Supabase 查詢
+import type { Property } from "@/types/property" // 使用更新的 Property 類型
+import { PropertiesPageClient } from "./properties-page-client"
 
-import { useState } from "react"
-import { mockProperties } from "@/lib/mock-data"
-import { PropertyCard } from "@/components/property-card"
-import { SearchBar } from "@/components/search-bar"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SlidersHorizontal } from "lucide-react"
+export default async function PropertiesPage() {
+  let properties: Property[] = []
+  let error: string | null = null
 
-export default function PropertiesPage() {
-  const [properties] = useState(mockProperties)
-  const [sortBy, setSortBy] = useState("recommended")
+  try {
+    console.log('🔍 開始載入房源資料...')
+    const data = await getProperties()
+    properties = data || []
+  } catch (err) {
+    console.error('❌ 載入房源失敗:', err)
+    error = err instanceof Error ? err.message : '載入房源失敗'
+  }
 
-  return (
-    <div className="min-h-screen bg-secondary/30">
-      {/* Search Section */}
-      <section className="border-b bg-card px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <h1 className="mb-6 text-3xl font-bold">探索房源</h1>
-          <SearchBar />
-        </div>
-      </section>
-
-      {/* Results Section */}
-      <section className="px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-6 flex items-center justify-between">
-            <p className="text-muted-foreground">
-              找到 <span className="font-semibold text-foreground">{properties.length}</span> 個房源
-            </p>
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recommended">推薦排序</SelectItem>
-                  <SelectItem value="price-low">價格：低到高</SelectItem>
-                  <SelectItem value="price-high">價格：高到低</SelectItem>
-                  <SelectItem value="rating">評分最高</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {properties.map((property) => (
-              <PropertyCard key={property.id} property={property} />
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
-  )
+  return <PropertiesPageClient initialProperties={properties} error={error} />
 }

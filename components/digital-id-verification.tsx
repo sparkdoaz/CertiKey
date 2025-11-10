@@ -18,8 +18,8 @@ export function DigitalIdVerification({ onVerified, onCancel }: DigitalIdVerific
   const [isVerified, setIsVerified] = useState(false)
 
   useEffect(() => {
-    // Generate verification ID
-    const id = `verify-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Generate verification ID with a more stable approach
+    const id = `verify-${crypto.randomUUID()}`
     setVerificationId(id)
 
     // Generate QR code with verification URL

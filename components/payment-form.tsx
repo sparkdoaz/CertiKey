@@ -11,7 +11,7 @@ import { CreditCard, Lock } from "lucide-react"
 
 interface PaymentFormProps {
   totalAmount: number
-  onSuccess: (bookingId: string) => void
+  onSuccess: (bookingId: string) => Promise<void>
 }
 
 export function PaymentForm({ totalAmount, onSuccess }: PaymentFormProps) {
@@ -39,11 +39,17 @@ export function PaymentForm({ totalAmount, onSuccess }: PaymentFormProps) {
     e.preventDefault()
     setIsProcessing(true)
 
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    try {
+      // Simulate payment processing
+      await new Promise((resolve) => setTimeout(resolve, 2000))
 
-    const bookingId = Math.random().toString(36).substr(2, 9)
-    onSuccess(bookingId)
+      const paymentId = crypto.randomUUID().substring(0, 9)
+      await onSuccess(paymentId)
+    } catch (error) {
+      console.error('Payment failed:', error)
+      alert('付款處理失敗，請重試')
+      setIsProcessing(false)
+    }
   }
 
   return (

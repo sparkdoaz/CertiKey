@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import type { Property } from "@/types/property"
@@ -24,6 +24,20 @@ export function BookingForm({ property }: BookingFormProps) {
   const [guests, setGuests] = useState("2")
   const [isLoading, setIsLoading] = useState(false)
 
+  // 使用 useMemo 來創建今天的日期字符串，避免 hydration 錯誤
+  const todayString = useMemo(() => new Date().toISOString().split("T")[0], [])
+
+  // 確保 property 和 price 存在
+  if (!property || (!property.price && !property.price_per_night)) {
+    return (
+      <Card className="sticky top-24">
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <p>房源資料載入中...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   const calculateNights = () => {
     if (!checkIn || !checkOut) return 0
     const start = new Date(checkIn)
@@ -33,9 +47,11 @@ export function BookingForm({ property }: BookingFormProps) {
   }
 
   const nights = calculateNights()
-  const subtotal = nights * property.price
+  const pricePerNight = property.price || property.price_per_night || 0
+  const subtotal = nights * pricePerNight
   const serviceFee = Math.round(subtotal * 0.1)
   const total = subtotal + serviceFee
+  const maxGuests = property.guests || property.max_guests || 4
 
   const handleBooking = async () => {
     if (!user) {
@@ -50,34 +66,23 @@ export function BookingForm({ property }: BookingFormProps) {
 
     setIsLoading(true)
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Store booking data
-    const booking = {
-      id: Math.random().toString(36).substr(2, 9),
+    // 導航到付款頁面，通過 URL 參數傳遞預訂資訊
+    const params = new URLSearchParams({
       propertyId: property.id,
-      propertyTitle: property.title,
-      propertyImage: property.images[0],
-      userId: user.id,
-      userName: user.name,
-      checkIn: new Date(checkIn),
-      checkOut: new Date(checkOut),
-      guests: Number.parseInt(guests),
-      totalPrice: total,
-      status: "pending",
-      createdAt: new Date(),
-    }
+      checkIn: checkIn,
+      checkOut: checkOut,
+      guests: guests,
+      totalPrice: total.toString()
+    })
 
-    localStorage.setItem("pendingBooking", JSON.stringify(booking))
-    router.push("/payment")
+    router.push(`/payment?${params.toString()}`)
   }
 
   return (
     <Card className="sticky top-24">
       <CardHeader>
         <CardTitle className="flex items-baseline gap-2">
-          <span className="text-2xl">NT$ {property.price.toLocaleString()}</span>
+          <span className="text-2xl">NT$ {pricePerNight.toLocaleString()}</span>
           <span className="text-base font-normal text-muted-foreground">/ 晚</span>
         </CardTitle>
       </CardHeader>
@@ -93,7 +98,7 @@ export function BookingForm({ property }: BookingFormProps) {
               type="date"
               value={checkIn}
               onChange={(e) => setCheckIn(e.target.value)}
-              min={new Date().toISOString().split("T")[0]}
+              min={todayString}
             />
           </div>
 
@@ -107,7 +112,7 @@ export function BookingForm({ property }: BookingFormProps) {
               type="date"
               value={checkOut}
               onChange={(e) => setCheckOut(e.target.value)}
-              min={checkIn || new Date().toISOString().split("T")[0]}
+              min={checkIn || todayString}
             />
           </div>
 
@@ -121,7 +126,7 @@ export function BookingForm({ property }: BookingFormProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Array.from({ length: property.guests }, (_, i) => i + 1).map((num) => (
+                {Array.from({ length: maxGuests }, (_, i) => i + 1).map((num) => (
                   <SelectItem key={num} value={num.toString()}>
                     {num} 位
                   </SelectItem>
@@ -137,7 +142,7 @@ export function BookingForm({ property }: BookingFormProps) {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">
-                  NT$ {property.price.toLocaleString()} × {nights} 晚
+                  NT$ {pricePerNight.toLocaleString()} × {nights} 晚
                 </span>
                 <span>NT$ {subtotal.toLocaleString()}</span>
               </div>

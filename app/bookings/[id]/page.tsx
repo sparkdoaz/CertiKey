@@ -1,20 +1,26 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { use, useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
 import type { Booking } from "@/types/booking"
+import { getBooking } from "@/lib/supabase-queries"
 import { DigitalRoomCard } from "@/components/digital-room-card"
 import { DoorAccessLogs } from "@/components/door-access-logs"
+import { SharedRoomCards } from "@/components/shared-room-cards"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { ArrowLeft } from "lucide-react"
 
-export default function BookingDetailPage({ params }: { params: { id: string } }) {
+export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const router = useRouter()
   const { user } = useAuth()
   const [booking, setBooking] = useState<Booking | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [isPrimaryGuest, setIsPrimaryGuest] = useState<boolean>(true)
 
   useEffect(() => {
     if (!user) {
@@ -22,23 +28,71 @@ export default function BookingDetailPage({ params }: { params: { id: string } }
       return
     }
 
-    const bookings = JSON.parse(localStorage.getItem("bookings") || "[]")
-    const foundBooking = bookings.find((b: Booking) => b.id === params.id && b.userId === user.id)
+    const fetchBooking = async () => {
+      try {
+        setLoading(true)
+        const data = await getBooking(id)
 
-    if (foundBooking) {
-      setBooking(foundBooking)
-    } else {
-      router.push("/bookings")
+        // 檢查是否為主住者
+        if (data && (data.guest_id === user.id || data.userId === user.id)) {
+          setBooking(data)
+          setIsPrimaryGuest(true)
+        } else {
+          // 檢查是否為同住者
+          const allSharedCards = JSON.parse(localStorage.getItem("sharedRoomCards") || "[]")
+          const coGuestCard = allSharedCards.find(
+            (card: any) => card.bookingId === id && card.guestEmail === user.email && card.status === "accepted"
+          )
+
+          if (coGuestCard && data) {
+            setBooking(data)
+            setIsPrimaryGuest(false)
+          } else {
+            router.push("/bookings")
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch booking:', error)
+        router.push("/bookings")
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [user, router, params.id])
 
-  if (!booking) {
+    fetchBooking()
+  }, [user, router, id])
+
+  // 獲取入住/退房日期,使用 useMemo 避免 hydration 錯誤
+  const checkInDate = useMemo(() => {
+    if (booking?.check_in_date) return new Date(booking.check_in_date)
+    if (booking?.checkIn) return booking.checkIn instanceof Date ? booking.checkIn : new Date(booking.checkIn)
+    return new Date()
+  }, [booking?.check_in_date, booking?.checkIn])
+
+  const checkOutDate = useMemo(() => {
+    if (booking?.check_out_date) return new Date(booking.check_out_date)
+    if (booking?.checkOut) return booking.checkOut instanceof Date ? booking.checkOut : new Date(booking.checkOut)
+    return new Date()
+  }, [booking?.check_out_date, booking?.checkOut])
+
+  if (loading) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
         <p className="text-muted-foreground">載入中...</p>
       </div>
     )
   }
+
+  if (!booking) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+        <p className="text-muted-foreground">找不到預訂資料</p>
+      </div>
+    )
+  }
+
+  // 獲取房源名稱,支援新舊資料格式
+  const propertyName = booking.property?.title || booking.propertyTitle || "房源"
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-secondary/30 px-4 py-8 sm:px-6 lg:px-8">
@@ -50,15 +104,40 @@ export default function BookingDetailPage({ params }: { params: { id: string } }
           </Button>
         </Link>
 
+        <div className="mb-4 flex items-center gap-2">
+          <h1 className="text-2xl font-bold">{propertyName}</h1>
+          {isPrimaryGuest ? (
+            <Badge variant="default" className="bg-primary text-primary-foreground">
+              主住者
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="bg-accent text-accent-foreground">
+              同住者
+            </Badge>
+          )}
+        </div>
+
         <Tabs defaultValue="room-card" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className={`grid w-full ${isPrimaryGuest ? "grid-cols-3" : "grid-cols-2"}`}>
             <TabsTrigger value="room-card">數位房卡</TabsTrigger>
+            {isPrimaryGuest && <TabsTrigger value="shared-cards">共享房卡管理</TabsTrigger>}
             <TabsTrigger value="access-logs">開門紀錄</TabsTrigger>
           </TabsList>
 
           <TabsContent value="room-card">
             <DigitalRoomCard booking={booking} />
           </TabsContent>
+
+          {isPrimaryGuest && (
+            <TabsContent value="shared-cards">
+              <SharedRoomCards
+                bookingId={booking.id}
+                propertyName={propertyName}
+                checkIn={checkInDate}
+                checkOut={checkOutDate}
+              />
+            </TabsContent>
+          )}
 
           <TabsContent value="access-logs">
             <DoorAccessLogs bookingId={booking.id} viewMode="guest" />

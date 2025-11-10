@@ -79,7 +79,8 @@ export function MembershipCardComponent({ card }: MembershipCardProps) {
         userId: card.userId,
         userName: card.userName,
         expiresAt: card.expiresAt,
-        timestamp: new Date().toISOString(),
+        // 使用卡片申請時間作為固定時間戳
+        timestamp: card.appliedAt || card.activatedAt || new Date().toISOString(),
       })
 
       QRCode.toDataURL(qrData, {
@@ -95,19 +96,20 @@ export function MembershipCardComponent({ card }: MembershipCardProps) {
     }
   }, [card])
 
-  const handleTestScan = () => {
-    // Simulate QR code being scanned
-    const updatedCard = {
-      ...card,
-      qrCodeStatus: "used" as const,
-      qrCodeUsedAt: new Date().toISOString(),
+  const handleTestScan = async () => {
+    try {
+      // 使用 Supabase 更新會員卡狀態
+      const { updateMembershipCard } = await import('@/lib/supabase-queries')
+      await updateMembershipCard(card.id, {
+        qr_code_status: 'used',
+        qr_code_used_at: new Date().toISOString()
+      })
+
+      window.location.reload()
+    } catch (error) {
+      console.error('Failed to update membership card:', error)
+      alert('更新失敗，請稍後再試')
     }
-
-    const storedCards = JSON.parse(localStorage.getItem("membershipCards") || "[]")
-    const updatedCards = storedCards.map((c: MembershipCard) => (c.id === card.id ? updatedCard : c))
-    localStorage.setItem("membershipCards", JSON.stringify(updatedCards))
-
-    window.location.reload()
   }
 
   const getStatusBadge = () => {
