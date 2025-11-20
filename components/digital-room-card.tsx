@@ -407,8 +407,8 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
 
   return (
     <>
-      <Card className="overflow-hidden">
-        <CardHeader className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
+      <Card className="bg-gradient-to-br from-primary to-primary/80 overflow-hidden">
+        <CardHeader className="text-primary-foreground">
           <div className="flex items-center justify-between">
             <CardTitle className="text-2xl">數位房卡</CardTitle>
             {getStatusBadge()}
@@ -432,7 +432,7 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
             </div>
           )}
         </CardHeader>
-        <CardContent className="space-y-6 p-6">
+        <CardContent className="bg-white space-y-6 p-6">
           {/* QR Code */}
           <div className="flex justify-center">
             <div className="rounded-lg bg-white p-4 shadow-lg">
