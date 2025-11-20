@@ -16,6 +16,20 @@ export interface VerificationResponse {
   authUri: string;
 }
 
+export interface VerificationResultResponse {
+  verifyResult: boolean;
+  resultDescription: string;
+  transactionId: string;
+  data: Array<{
+    credentialType: string;
+    claims: Array<{
+      ename: string;
+      cname: string;
+      value: string;
+    }>;
+  }>;
+}
+
 export interface APIError {
   error: string;
   message: string;
@@ -46,6 +60,36 @@ export async function getVerificationData(transactionId: string): Promise<Verifi
   }
 
   return await response.json();
+}
+
+/**
+ * 取得驗證結果
+ */
+export async function getVerificationResult(transactionId: string): Promise<VerificationResultResponse> {
+
+  if (!ACCESS_TOKEN) {
+    throw new Error('VERIFIER_ACCESS_TOKEN is not configured');
+  }
+
+  const url = `${API_BASE_URL}/oidvp/result?transactionId=${transactionId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Token': ACCESS_TOKEN,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+    // 靜默處理 API 錯誤，避免過多錯誤日誌
+    throw new Error(`Verification result retrieval failed: ${errorData.message || response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  return result;
 }
 
 /**

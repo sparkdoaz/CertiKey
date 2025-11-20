@@ -4,15 +4,14 @@ import { useState, useEffect, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CheckCircle2, XCircle, Loader2, DoorOpen } from "lucide-react"
-import type { Booking } from "@/types/booking"
-import { getDoorQRCode } from "./actions"
+import { getDoorQRCode, checkVerificationResult } from "./actions"
 
 type DoorState = "idle" | "qrcode" | "success" | "error"
 type ErrorType = "expired" | "unauthorized" | "already-used"
 
 interface SmartDoorDemoClientProps {
-  initialBooking: Booking | null
   initialProperty: PropertyInfo | null
+  initialRoom: string | null
   initialError: string | null
 }
 
@@ -23,16 +22,16 @@ interface PropertyInfo {
 }
 
 const COUNTDOWN_SECONDS = 900
+const CHECK_INTERVAL_MS = 5000
 
-export function SmartDoorDemoClient({ initialBooking, initialProperty, initialError }: SmartDoorDemoClientProps) {
+export function SmartDoorDemoClient({ initialProperty, initialRoom, initialError }: SmartDoorDemoClientProps) {
   const [state, setState] = useState<DoorState>("idle")
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS)
   const [errorType, setErrorType] = useState<ErrorType>("expired")
   const [isAnimating, setIsAnimating] = useState(false)
   const [qrCodeValue, setQrCodeValue] = useState("")
+  const [transactionId, setTransactionId] = useState("")
   const [isPending, startTransition] = useTransition()
-
-  const roomNumber = initialBooking?.room_number || "未分配"
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -49,11 +48,52 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
     }
   }, [state, countdown])
 
+  useEffect(() => {
+    console.log(`[useEffect] 檢查條件 - state: ${state}, transactionId: ${transactionId}, countdown: ${countdown}`)
+    if (state === "qrcode" && transactionId && countdown > 0) {
+      console.log(`[useEffect] 條件滿足，開始設置檢查間隔`)
+      const checkResult = async () => {
+        // 檢查 countdown 是否還有效
+        if (countdown <= 0) {
+          console.log(`[${new Date().toLocaleTimeString()}] Countdown 已結束，停止檢查`)
+          return
+        }
+
+        console.log(`[${new Date().toLocaleTimeString()}] 開始檢查驗證結果...`)
+        const isVerified = await checkVerificationResult(transactionId)
+        console.log(`[${new Date().toLocaleTimeString()}] 檢查結果:`, isVerified)
+
+        if (isVerified === false) {
+          console.log(`[${new Date().toLocaleTimeString()}] 驗證尚未成功，繼續檢查`)
+          // 驗證尚未成功，繼續等待下次檢查
+          return
+        }
+
+        if (isVerified) {
+          console.log(`[${new Date().toLocaleTimeString()}] 驗證成功！`)
+          handleScanSuccess()
+        }
+      }
+
+      // 每 5 秒檢查一次
+      const interval = setInterval(checkResult, CHECK_INTERVAL_MS)
+      console.log(`[useEffect] 設置了檢查間隔，ID:`, interval)
+      return () => {
+        console.log(`[useEffect] 清除檢查間隔，ID:`, interval)
+        clearInterval(interval)
+      }
+    } else {
+      console.log(`[useEffect] 條件不滿足，跳過設置檢查間隔`)
+    }
+  }, [state, transactionId]) // 移除 countdown 依賴項
+
   const handleOpenDoor = () => {
     startTransition(async () => {
       try {
-        const qrCode = await getDoorQRCode()
-        setQrCodeValue(qrCode)
+        const result = await getDoorQRCode(initialProperty!.id, initialRoom!)
+        setQrCodeValue(result.qrcodeImage)
+        setTransactionId(result.transactionId)
+        console.log('Received QR Code and Transaction ID:', result)
         setState("qrcode")
         setCountdown(COUNTDOWN_SECONDS)
       } catch (error) {
@@ -106,7 +146,7 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
     }
   }
 
-  if (initialError || !initialBooking) {
+  if (initialError || !initialProperty) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[oklch(0.25_0.05_240)] to-[oklch(0.15_0.03_260)] p-4">
         <Card className="w-full max-w-md p-8 text-center">
@@ -140,7 +180,7 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
                 <DoorOpen className="h-16 w-16 text-[oklch(0.75_0.15_45)]" />
                 <h1 className="text-3xl font-bold text-white">智慧房門系統</h1>
                 <p className="text-lg text-[oklch(0.70_0.05_240)]">{initialProperty?.title || "未知房間"}</p>
-                <p className="text-sm text-[oklch(0.60_0.05_240)]">房號 {roomNumber}</p>
+                <p className="text-sm text-[oklch(0.60_0.05_240)]">房號 {initialRoom}</p>
               </div>
 
               <Button

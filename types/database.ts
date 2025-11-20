@@ -74,3 +74,15 @@ export interface MembershipCard {
   created_at: string
   updated_at: string
 }
+
+export interface DoorQrCode {
+  id: string
+  property_id: string
+  transaction_id: string
+  room: string
+  status: 'active' | 'used' | 'expired' | 'cancelled'
+  created_at: string
+  updated_at: string
+  expires_at: string
+  used_at?: string
+}
