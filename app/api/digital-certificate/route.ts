@@ -2,28 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CertificateRequest, CertificateResponse, CertificateApiError } from '../../../types/digital-certificate';
 import { validateFields } from '../../../lib/certificate-validation';
 import { createClient } from '@supabase/supabase-js';
-
-// API 配置
-const API_URL = process.env.DIGITAL_CERTIFICATE_API_URL;
-const ACCESS_TOKEN = process.env.DIGITAL_CERTIFICATE_ACCESS_TOKEN;
+import { createCertificate, handleAPIError } from '../../../lib/digital-certificate-api';
 
 // Supabase 配置
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    // 檢查環境變數是否設定
-    if (!API_URL || !ACCESS_TOKEN) {
-      console.error('Missing environment variables:', { API_URL: !!API_URL, ACCESS_TOKEN: !!ACCESS_TOKEN });
-      return NextResponse.json(
-        { 
-          error: 'SERVER_CONFIG_ERROR', 
-          message: '伺服器配置錯誤，請聯繫系統管理員' 
-        } as CertificateApiError,
-        { status: 500 }
-      );
-    }
 
     // 從請求 header 獲取 Authorization token
     const authHeader = request.headers.get('authorization');
@@ -40,7 +26,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const token = authHeader.replace('Bearer ', '');
 
     // 使用用戶的 token 建立 Supabase 客戶端
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       global: {
         headers: {
           Authorization: authHeader
@@ -357,65 +343,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // 呼叫外部 API
-    console.log('Calling external API:', API_URL);
-    console.log('Request payload:', JSON.stringify(requestData, null, 2));
+    console.log('Calling external API with request payload:', JSON.stringify(requestData, null, 2));
 
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Token': ACCESS_TOKEN,
-      },
-      body: JSON.stringify(requestData),
-    });
-
-    // 處理外部 API 回應
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('External API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText
-      });
-
-      // 根據狀態碼提供適當的錯誤訊息
-      let errorMessage = '外部服務錯誤';
-      if (response.status === 401) {
-        errorMessage = '認證失敗，請檢查 Access Token';
-      } else if (response.status === 400) {
-        errorMessage = '請求參數錯誤';
-      } else if (response.status === 429) {
-        errorMessage = '請求頻率過高，請稍後再試';
-      } else if (response.status >= 500) {
-        errorMessage = '外部服務暫時無法使用，請稍後再試';
-      }
-
-      return NextResponse.json(
-        { 
-          error: 'EXTERNAL_API_ERROR', 
-          message: errorMessage,
-          details: {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText
-          }
-        } as CertificateApiError,
-        { status: response.status === 401 ? 500 : response.status }
-      );
-    }
-
-    // 解析成功回應
     let responseData: CertificateResponse;
     try {
-      responseData = await response.json();
+      responseData = await createCertificate(requestData);
     } catch (error) {
-      console.error('Failed to parse external API response:', error);
+      console.error('External API error:', error);
+
+      const apiError = handleAPIError({ ok: false, status: 500 } as Response, { message: error instanceof Error ? error.message : 'Unknown error' });
+
       return NextResponse.json(
-        { 
-          error: 'EXTERNAL_API_RESPONSE_ERROR', 
-          message: '外部 API 回應格式錯誤' 
+        {
+          error: apiError.error,
+          message: apiError.message,
+          details: apiError.details
         } as CertificateApiError,
-        { status: 502 }
+        { status: 500 }
       );
     }
 

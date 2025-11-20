@@ -108,8 +108,19 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
   const queryVcStatus = async (txId: string) => {
     try {
       const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        return
+      }
+
+      if (!session?.access_token) {
+        console.log('No access token available')
+        return
+      }
+
+      console.log('Making API call with token length:', session.access_token.length)
 
       const response = await fetch(`/api/digital-certificate/status/${txId}`, {
         headers: {
@@ -161,10 +172,10 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
     // 立即查詢一次
     queryVcStatus(txId)
 
-    // 每 5 秒查詢一次
+    // 每 15 秒查詢一次
     pollingIntervalRef.current = setInterval(() => {
       queryVcStatus(txId)
-    }, 5000)
+    }, 15000) //todo
   }
 
   useEffect(() => {
@@ -287,8 +298,8 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
       // deepLink 是純文字 URL,如果沒有 qrCode 才使用
       setQrCodeData(data.qrCode || data.deepLink)
 
-      // 啟動 5 分鐘倒數計時
-      setTimeRemaining(300) // 300 秒 = 5 分鐘
+      // 啟動 30 分鐘倒數計時
+      setTimeRemaining(1800) // 1800 秒 = 30 分鐘
       setVcStatus('pending')
 
       // 開始輪詢 VC 狀態
@@ -342,28 +353,6 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
       }
     }
   }, [qrCodeData, qrCodeStatus])
-
-  const handleSimulateUsage = async () => {
-    try {
-      // 使用 Supabase 更新訂單狀態
-      const { updateBooking } = await import('@/lib/supabase-queries')
-      await updateBooking(booking.id, {
-        qr_code_status: 'used',
-        qr_code_used_at: new Date().toISOString()
-      })
-
-      setQrCodeStatus("used")
-      setErrorDialog({
-        open: true,
-        title: "QR Code 已被使用",
-        description: `此 QR Code 已於 ${new Date().toLocaleString("zh-TW")} 被掃描使用，無法再次使用。`,
-        type: "used",
-      })
-    } catch (error) {
-      console.error('Failed to update booking:', error)
-      alert('更新失敗，請稍後再試')
-    }
-  }
 
   const getStatusBadge = () => {
     switch (qrCodeStatus) {
@@ -548,15 +537,6 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
               </>
             )}
           </div>
-
-          {qrCodeStatus === "valid" && qrCodeData && (
-            <div className="rounded-lg border border-dashed border-muted-foreground/30 p-4">
-              <p className="mb-2 text-center text-xs text-muted-foreground">測試功能</p>
-              <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={handleSimulateUsage}>
-                模擬 QR Code 被掃描使用
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -564,7 +544,11 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
+              {errorDialog.type === "used" ? (
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+              )}
               {errorDialog.title}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base">{errorDialog.description}</AlertDialogDescription>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 /**
  * GET /api/digital-certificate/booking/[bookingId]
@@ -10,10 +10,10 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { bookingId: string } }
+  { params }: { params: Promise<{ bookingId: string }> }
 ): Promise<NextResponse> {
   try {
-    const bookingId = params.bookingId;
+    const { bookingId } = await params;
 
     // 從請求 header 獲取 Authorization token
     const authHeader = request.headers.get('authorization');
@@ -27,7 +27,7 @@ export async function GET(
     const token = authHeader.replace('Bearer ', '');
 
     // 建立 Supabase 客戶端
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       global: {
         headers: {
           Authorization: authHeader

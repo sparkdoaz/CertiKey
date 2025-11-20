@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { VCStatusResponse, ParsedJWTPayload } from '@/types/digital-certificate-record';
+import { getCertificateStatus, handleAPIError, VCStatusResult } from '@/lib/digital-certificate-api';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-// VC 狀態查詢 API URL
-const VC_STATUS_API_URL = 'https://issuer-sandbox.wallet.gov.tw/api/credential/nonce';
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 /**
  * 解析 JWT Token
@@ -40,12 +38,17 @@ function extractCredentialId(jti: string): string | null {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { transactionId: string } }
+  { params }: { params: Promise<{ transactionId: string }> }
 ): Promise<NextResponse> {
   try {
-    const { transactionId } = params;
+    console.log('🔍 VC Status API called, parsing params...');
+    const paramsData = await params;
+    console.log('📊 Params parsed:', paramsData);
+    const { transactionId } = paramsData;
+    console.log('🔍 VC Status API called with transactionId:', transactionId);
 
     if (!transactionId) {
+      console.log('❌ Missing transactionId parameter');
       return NextResponse.json(
         { error: 'MISSING_TRANSACTION_ID', message: '缺少 transactionId 參數' },
         { status: 400 }
@@ -54,7 +57,14 @@ export async function GET(
 
     // 驗證用戶身份
     const authHeader = request.headers.get('authorization');
+    console.log('🔐 Auth header check:', {
+      present: !!authHeader,
+      startsWithBearer: authHeader?.startsWith('Bearer '),
+      length: authHeader?.length
+    });
+    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ Invalid auth header format');
       return NextResponse.json(
         { error: 'UNAUTHORIZED', message: '未授權：缺少認證憑證' },
         { status: 401 }
@@ -62,27 +72,53 @@ export async function GET(
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
+    console.log('🔑 Token extracted, length:', token.length, 'starts with:', token.substring(0, 20) + '...');
+    
+    // 使用 service role key 建立 Supabase 客戶端來驗證 token
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
+    // 驗證 JWT token
+    console.log('🔐 Verifying JWT token with Supabase...');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
+    console.log('📊 Auth result:', { 
+      user: user ? { id: user.id, email: user.email } : null, 
+      error: authError,
+      hasUser: !!user,
+      hasError: !!authError
+    });
+    
     if (authError || !user) {
+      console.log('❌ Authentication failed:', authError);
       return NextResponse.json(
         { error: 'UNAUTHORIZED', message: '認證失敗' },
         { status: 401 }
       );
     }
 
+    console.log('✅ Authentication successful for user:', user.id);
+
     // 從資料庫查詢憑證記錄
+    console.log('🔍 Querying database for transaction_id:', transactionId);
     const { data: certificate, error: dbError } = await supabase
       .from('digital_certificates')
       .select('*')
       .eq('transaction_id', transactionId)
       .single();
 
+    console.log('📊 Database query result:', { 
+      found: !!certificate, 
+      error: dbError,
+      certificate: certificate ? {
+        id: certificate.id,
+        user_id: certificate.user_id,
+        status: certificate.status,
+        transaction_id: certificate.transaction_id
+      } : null
+    });
+
     if (dbError || !certificate) {
+      console.log('❌ Certificate not found in database:', { dbError, hasCertificate: !!certificate });
       return NextResponse.json(
         { error: 'CERTIFICATE_NOT_FOUND', message: '找不到憑證記錄' },
         { status: 404 }
@@ -90,67 +126,54 @@ export async function GET(
     }
 
     // 驗證權限：確保是用戶自己的憑證
+    console.log('🔐 Checking permissions:', { 
+      certificate_user_id: certificate.user_id, 
+      request_user_id: user.id,
+      match: certificate.user_id === user.id 
+    });
     if (certificate.user_id !== user.id) {
+      console.log('❌ Permission denied: user does not own this certificate');
       return NextResponse.json(
         { error: 'FORBIDDEN', message: '無權存取此憑證' },
         { status: 403 }
       );
     }
 
+    // 額外安全檢查：驗證 token 沒有過期
+    // 注意：Supabase User 對象不包含 exp 屬性，這裡我們信任 Supabase 的內建驗證
+    // 如果需要手動驗證 token 過期，可以解析原始 JWT token
+
     // 呼叫外部 API 查詢 VC 狀態
-    const vcStatusUrl = `${VC_STATUS_API_URL}/${transactionId}`;
-    console.log('Querying VC status:', vcStatusUrl);
+    console.log('Querying VC status for transaction:', transactionId);
 
-    const response = await fetch(vcStatusUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // 處理 API 回應
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.log('VC status API error response:', {
-        status: response.status,
-        data: errorData
-      });
-
-      // 處理 400: QR Code 尚未被掃描 (code: "61010")
-      if (response.status === 400 && errorData.code === '61010') {
+    const vcStatusResult: VCStatusResult = await getCertificateStatus(transactionId);
+    
+    // 檢查是否為錯誤響應
+    if ('error' in vcStatusResult) {
+      // 這是特殊的錯誤響應（例如憑證尚未被領取）
+      if (vcStatusResult.code === '61010') {
         return NextResponse.json({
           transaction_id: transactionId,
           status: 'pending',
-          message: errorData.message || 'QR Code 尚未被掃描',
+          message: vcStatusResult.message || 'QR Code 尚未被掃描',
           certificate_status: certificate.status,
           created_at: certificate.created_at,
         }, { status: 200 }); // 這不是錯誤,是正常的待掃描狀態
       }
-
-      // 處理 500: 伺服器端錯誤 (code: "500")
-      if (response.status === 500 && errorData.code === '500') {
-        return NextResponse.json(
-          {
-            error: 'VC_API_SERVER_ERROR',
-            message: errorData.message || '政府 VC API 伺服器錯誤',
-            code: errorData.code,
-          },
-          { status: 500 }
-        );
-      }
-
-      // 其他未預期的錯誤
+      
+      // 其他錯誤
       return NextResponse.json(
         {
-          error: 'VC_STATUS_API_ERROR',
-          message: '查詢 VC 狀態失敗',
-          details: { status: response.status, body: errorData }
+          error: vcStatusResult.error,
+          message: vcStatusResult.message,
+          code: vcStatusResult.code,
         },
-        { status: response.status }
+        { status: 400 }
       );
     }
 
-    const vcStatus: VCStatusResponse = await response.json();
+    // 正常的成功響應
+    const vcStatus = vcStatusResult;
 
     // 解析 JWT Token
     const parsedPayload = parseJWT(vcStatus.credential);

@@ -4,14 +4,11 @@ import {
   canUserRevokeCertificate,
   markCertificateAsRevoked,
 } from '@/lib/digital-certificate-queries';
+import { revokeCertificate } from '@/lib/digital-certificate-api';
 
 // Supabase 配置
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-// 政府 VC API 配置
-const VC_API_URL = process.env.DIGITAL_CERTIFICATE_API_URL || 'https://issuer-sandbox.wallet.gov.tw/api';
-const ACCESS_TOKEN = process.env.DIGITAL_CERTIFICATE_ACCESS_TOKEN!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 /**
  * POST /api/digital-certificate/revoke-by-nonce
@@ -43,7 +40,7 @@ export async function POST(request: NextRequest) {
     const token = authHeader.replace('Bearer ', '');
 
     // 使用用戶的 token 建立 Supabase 客戶端
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
       global: {
         headers: {
           Authorization: authHeader
@@ -142,53 +139,42 @@ export async function POST(request: NextRequest) {
     const credential_id = certificate.credential_id;
 
     try {
-      const revokeUrl = `${VC_API_URL}/credential/${credential_id}/revocation`;
-      console.log('Calling government revoke API:', revokeUrl);
+      console.log('Calling government revoke API for credential:', credential_id);
+      await revokeCertificate(credential_id);
 
-      const response = await fetch(revokeUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Token': ACCESS_TOKEN,
+      // 成功撤銷
+      console.log('Government API revoke successful');
+
+      // 更新本地資料庫
+      await markCertificateAsRevoked(certificateId);
+
+      return NextResponse.json({
+        success: true,
+        message: '憑證撤銷成功',
+        reason,
+        certificate: {
+          id: certificateId,
+          status: 'revoked',
+          revoked_at: new Date().toISOString(),
+          credential_id,
+          nonce: certificate.nonce,
         },
       });
+    } catch (error) {
+      console.error('Government API revoke failed:', error);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Government API revoke failed:', {
-          status: response.status,
-          data: errorData,
-        });
-
-        // 處理特定錯誤碼
-        if (errorData.code === '61006') {
-          // 不合法的憑證識別碼
-          console.warn('Invalid credential ID, marking as revoked locally');
-          await markCertificateAsRevoked(certificateId);
-
-          return NextResponse.json({
-            success: true,
-            message: '憑證撤銷成功',
-            reason,
-            warning: '政府 API 回報憑證識別碼不合法,已在本地標記為撤銷',
-            certificate: {
-              id: certificateId,
-              status: 'revoked',
-              revoked_at: new Date().toISOString(),
-              credential_id,
-              nonce: certificate.nonce,
-            },
-          });
-        }
-
-        // 其他 API 錯誤,仍然在本地標記為撤銷(降級處理)
+      // 處理特定錯誤
+      const errorMessage = error instanceof Error ? error.message : '未知錯誤';
+      if (errorMessage.includes('61006') || errorMessage.includes('不合法的憑證識別碼')) {
+        // 不合法的憑證識別碼
+        console.warn('Invalid credential ID, marking as revoked locally');
         await markCertificateAsRevoked(certificateId);
 
         return NextResponse.json({
           success: true,
           message: '憑證撤銷成功',
           reason,
-          warning: `政府 API 撤銷失敗(${errorData.message || '未知錯誤'}),但已在本地標記為撤銷`,
+          warning: '政府 API 回報憑證識別碼不合法,已在本地標記為撤銷',
           certificate: {
             id: certificateId,
             status: 'revoked',
@@ -199,37 +185,14 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 成功撤銷
-      const result = await response.json();
-      console.log('Government API revoke successful:', result);
-
-      // 更新本地資料庫
+      // 其他 API 錯誤,仍然在本地標記為撤銷(降級處理)
       await markCertificateAsRevoked(certificateId);
 
       return NextResponse.json({
         success: true,
         message: '憑證撤銷成功',
         reason,
-        credentialStatus: result.credentialStatus,
-        certificate: {
-          id: certificateId,
-          status: 'revoked',
-          revoked_at: new Date().toISOString(),
-          credential_id,
-          nonce: certificate.nonce,
-        },
-      });
-    } catch (apiError) {
-      console.error('Unexpected error calling government API:', apiError);
-
-      // API 呼叫失敗,但仍然在本地標記為撤銷
-      await markCertificateAsRevoked(certificateId);
-
-      return NextResponse.json({
-        success: true,
-        message: '憑證撤銷成功',
-        reason,
-        warning: '政府 API 無法連線,但已在本地標記為撤銷',
+        warning: `政府 API 撤銷失敗(${errorMessage}),但已在本地標記為撤銷`,
         certificate: {
           id: certificateId,
           status: 'revoked',
