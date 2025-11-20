@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CheckCircle2, XCircle, Loader2, DoorOpen } from "lucide-react"
-import QRCode from "react-qr-code"
 import type { Booking } from "@/types/booking"
+import { getDoorQRCode } from "./actions"
 
 type DoorState = "idle" | "qrcode" | "success" | "error"
 type ErrorType = "expired" | "unauthorized" | "already-used"
@@ -22,14 +22,23 @@ interface PropertyInfo {
   vc_title?: string
 }
 
+const COUNTDOWN_SECONDS = 900
+
 export function SmartDoorDemoClient({ initialBooking, initialProperty, initialError }: SmartDoorDemoClientProps) {
   const [state, setState] = useState<DoorState>("idle")
-  const [countdown, setCountdown] = useState(30)
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS)
   const [errorType, setErrorType] = useState<ErrorType>("expired")
   const [isAnimating, setIsAnimating] = useState(false)
   const [qrCodeValue, setQrCodeValue] = useState("")
+  const [isPending, startTransition] = useTransition()
 
   const roomNumber = initialBooking?.room_number || "未分配"
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
 
   useEffect(() => {
     if (state === "qrcode" && countdown > 0) {
@@ -41,13 +50,17 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
   }, [state, countdown])
 
   const handleOpenDoor = () => {
-    setIsAnimating(true)
-    setTimeout(() => {
-      setQrCodeValue(`DOOR_ACCESS:${roomNumber}:${Date.now()}`)
-      setState("qrcode")
-      setCountdown(30)
-      setIsAnimating(false)
-    }, 300)
+    startTransition(async () => {
+      try {
+        const qrCode = await getDoorQRCode()
+        setQrCodeValue(qrCode)
+        setState("qrcode")
+        setCountdown(COUNTDOWN_SECONDS)
+      } catch (error) {
+        console.error('Failed to get verification data:', error)
+        handleError("unauthorized")
+      }
+    })
   }
 
   const handleScanSuccess = () => {
@@ -75,7 +88,7 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
     setIsAnimating(true)
     setTimeout(() => {
       setState("idle")
-      setCountdown(30)
+      setCountdown(COUNTDOWN_SECONDS)
       setIsAnimating(false)
     }, 300)
   }
@@ -111,7 +124,7 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
     )
   }
 
-  const progressPercentage = (countdown / 30) * 100
+  const progressPercentage = (countdown / COUNTDOWN_SECONDS) * 100
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[oklch(0.25_0.05_240)] to-[oklch(0.15_0.03_260)] p-4">
@@ -133,9 +146,10 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
               <Button
                 onClick={handleOpenDoor}
                 size="lg"
-                className="h-32 w-32 rounded-full bg-gradient-to-br from-[oklch(0.75_0.15_45)] to-[oklch(0.65_0.15_35)] text-xl font-bold text-[oklch(0.15_0.03_260)] shadow-lg hover:scale-105 hover:shadow-[oklch(0.75_0.15_45)]/50 active:scale-95"
+                disabled={isPending}
+                className="h-32 w-32 rounded-full bg-gradient-to-br from-[oklch(0.75_0.15_45)] to-[oklch(0.65_0.15_35)] text-xl font-bold text-[oklch(0.15_0.03_260)] shadow-lg hover:scale-105 hover:shadow-[oklch(0.75_0.15_45)]/50 active:scale-95 disabled:opacity-50"
               >
-                開門
+                {isPending ? <Loader2 className="h-8 w-8 animate-spin" /> : "開門"}
               </Button>
 
               <p className="text-sm text-[oklch(0.60_0.05_240)]">點擊按鈕開始開門流程</p>
@@ -149,7 +163,7 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
 
               <div className="relative">
                 <div className="rounded-2xl bg-white p-6">
-                  <QRCode value={qrCodeValue} size={200} />
+                  <img src={qrCodeValue} alt="QR Code" className="w-[200px] h-[200px]" />
                 </div>
 
                 {/* Countdown Circle */}
@@ -168,42 +182,19 @@ export function SmartDoorDemoClient({ initialBooking, initialProperty, initialEr
                       className="transition-all duration-1000"
                     />
                   </svg>
-                  <span className="relative z-10">{countdown}</span>
+                  <span className="relative z-10">{formatTime(countdown)}</span>
                 </div>
               </div>
 
               <p className="text-sm text-[oklch(0.70_0.05_240)]">請使用 App 掃描此 QR Code 進行開門授權</p>
 
-              {/* Simulation Buttons */}
-              <div className="mt-4 flex flex-col gap-2">
-                <p className="text-xs text-[oklch(0.60_0.05_240)]">模擬測試：</p>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleScanSuccess}
-                    size="sm"
-                    variant="outline"
-                    className="border-green-500/50 bg-green-500/20 text-green-400 hover:bg-green-500/30"
-                  >
-                    模擬成功
-                  </Button>
-                  <Button
-                    onClick={() => handleScanError("unauthorized")}
-                    size="sm"
-                    variant="outline"
-                    className="border-red-500/50 bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  >
-                    無權限
-                  </Button>
-                  <Button
-                    onClick={() => handleScanError("already-used")}
-                    size="sm"
-                    variant="outline"
-                    className="border-red-500/50 bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  >
-                    已使用
-                  </Button>
-                </div>
-              </div>
+              <Button
+                onClick={handleReset}
+                variant="outline"
+                className="mt-4 border-[oklch(0.45_0.08_240)] bg-transparent text-[oklch(0.70_0.05_240)] hover:bg-[oklch(0.45_0.08_240)]/20"
+              >
+                返回
+              </Button>
             </div>
           )}
 
