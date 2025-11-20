@@ -1,9 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { useAuth } from "@/contexts/auth-context"
 import type { Booking } from "@/types/booking"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,29 +11,6 @@ interface PaymentSuccessClientProps {
 }
 
 export default function PaymentSuccessClient({ booking }: PaymentSuccessClientProps) {
-  const router = useRouter()
-  const { user } = useAuth()
-
-  useEffect(() => {
-    if (!user) {
-      router.push("/login")
-      return
-    }
-
-    // 驗證訂單屬於當前用戶
-    if (booking.guest_id !== user.id && booking.userId !== user.id) {
-      router.push("/properties")
-      return
-    }
-  }, [user, router, booking])
-
-  if (!user) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <p className="text-muted-foreground">載入中...</p>
-      </div>
-    )
-  }
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">

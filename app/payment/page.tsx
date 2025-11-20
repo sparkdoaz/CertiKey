@@ -1,21 +1,26 @@
 import { redirect } from "next/navigation"
+import { requireAuth } from "@/lib/auth"
 import { getProperty } from "@/lib/supabase-queries"
 import PaymentClient from "./payment-client"
 
 interface PageProps {
-  searchParams: {
+  searchParams: Promise<{
     propertyId?: string
     checkIn?: string
     checkOut?: string
     guests?: string
     totalPrice?: string
-  }
+  }>
 }
 
 export default async function PaymentPage({ searchParams }: PageProps) {
-  console.log('🔍 Payment 頁面開始載入，參數:', searchParams)
+  // 先驗證用戶登入
+  const { user } = await requireAuth()
 
-  const { propertyId, checkIn, checkOut, guests, totalPrice } = searchParams
+  const params = await searchParams
+  console.log('🔍 Payment 頁面開始載入，參數:', params)
+
+  const { propertyId, checkIn, checkOut, guests, totalPrice } = params
 
   // 驗證必要參數
   if (!propertyId || !checkIn || !checkOut || !guests || !totalPrice) {
@@ -45,7 +50,7 @@ export default async function PaymentPage({ searchParams }: PageProps) {
       totalPrice: parseFloat(totalPrice),
     }
 
-    return <PaymentClient bookingData={bookingData} />
+    return <PaymentClient bookingData={bookingData} userId={user.id} />
   } catch (error) {
     console.error('❌ Payment 頁面載入房源失敗:', error)
     redirect("/properties")

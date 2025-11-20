@@ -1,9 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
-import { createBooking } from "@/lib/supabase-queries"
 import { PaymentForm } from "@/components/payment-form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -22,47 +19,44 @@ interface BookingData {
 
 interface PaymentClientProps {
   bookingData: BookingData
+  userId: string
 }
 
-export default function PaymentClient({ bookingData }: PaymentClientProps) {
+export default function PaymentClient({ bookingData, userId }: PaymentClientProps) {
   const router = useRouter()
-  const { user } = useAuth()
-
-  useEffect(() => {
-    if (!user) {
-      router.push("/login")
-      return
-    }
-  }, [user, router])
 
   const handlePaymentSuccess = async (paymentId: string) => {
-    if (!user) return
-
     try {
-      // 創建訂單到 Supabase
-      const newBooking = await createBooking({
-        guest_id: user.id,
-        property_id: bookingData.propertyId,
-        check_in_date: bookingData.checkIn,
-        check_out_date: bookingData.checkOut,
-        guests: bookingData.guests,
-        total_price: bookingData.totalPrice,
-        status: 'confirmed'
+      // 通過 API 創建訂單 (使用 service role key 繞過 RLS)
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          guest_id: userId,
+          property_id: bookingData.propertyId,
+          check_in_date: bookingData.checkIn,
+          check_out_date: bookingData.checkOut,
+          guests: bookingData.guests,
+          total_price: bookingData.totalPrice,
+          status: 'confirmed'
+        })
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || '創建訂單失敗')
+      }
+
+      const result = await response.json()
+      const newBooking = result.data
 
       router.push(`/payment/success?bookingId=${newBooking.id}`)
     } catch (error) {
       console.error('Failed to create booking:', error)
-      alert('訂單創建失敗,請聯繫客服')
+      alert(`訂單創建失敗: ${error instanceof Error ? error.message : '請聯繫客服'}`)
     }
-  }
-
-  if (!user) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <p className="text-muted-foreground">載入中...</p>
-      </div>
-    )
   }
 
   const nights = Math.ceil(

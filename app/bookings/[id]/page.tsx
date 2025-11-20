@@ -1,149 +1,66 @@
-"use client"
+import { redirect, notFound } from "next/navigation"
+import { requireAuth } from "@/lib/auth"
+import { BookingDetailClient } from "./booking-detail-client"
 
-import { use, useEffect, useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { useAuth } from "@/contexts/auth-context"
-import type { Booking } from "@/types/booking"
-import { getBooking } from "@/lib/supabase-queries"
-import { DigitalRoomCard } from "@/components/digital-room-card"
-import { DoorAccessLogs } from "@/components/door-access-logs"
-import { SharedRoomCards } from "@/components/shared-room-cards"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { ArrowLeft } from "lucide-react"
+interface PageProps {
+  params: Promise<{ id: string }>
+}
 
-export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const router = useRouter()
-  const { user } = useAuth()
-  const [booking, setBooking] = useState<Booking | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [isPrimaryGuest, setIsPrimaryGuest] = useState<boolean>(true)
+export default async function BookingDetailPage({ params }: PageProps) {
+  const { user, supabase } = await requireAuth()
+  const { id } = await params
 
-  useEffect(() => {
-    if (!user) {
-      router.push("/login")
-      return
-    }
+  // 查詢訂單資料
+  const { data: booking, error: bookingError } = await supabase
+    .from('bookings')
+    .select(`
+      *,
+      property:properties(*),
+      guest:user_profiles(*)
+    `)
+    .eq('id', id)
+    .maybeSingle()
 
-    const fetchBooking = async () => {
-      try {
-        setLoading(true)
-        const data = await getBooking(id)
-
-        // 檢查是否為主住者
-        if (data && (data.guest_id === user.id || data.userId === user.id)) {
-          setBooking(data)
-          setIsPrimaryGuest(true)
-        } else {
-          // 檢查是否為同住者
-          const allSharedCards = JSON.parse(localStorage.getItem("sharedRoomCards") || "[]")
-          const coGuestCard = allSharedCards.find(
-            (card: any) => card.bookingId === id && card.guestEmail === user.email && card.status === "accepted"
-          )
-
-          if (coGuestCard && data) {
-            setBooking(data)
-            setIsPrimaryGuest(false)
-          } else {
-            router.push("/bookings")
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch booking:', error)
-        router.push("/bookings")
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchBooking()
-  }, [user, router, id])
-
-  // 獲取入住/退房日期,使用 useMemo 避免 hydration 錯誤
-  const checkInDate = useMemo(() => {
-    if (booking?.check_in_date) return new Date(booking.check_in_date)
-    if (booking?.checkIn) return booking.checkIn instanceof Date ? booking.checkIn : new Date(booking.checkIn)
-    return new Date()
-  }, [booking?.check_in_date, booking?.checkIn])
-
-  const checkOutDate = useMemo(() => {
-    if (booking?.check_out_date) return new Date(booking.check_out_date)
-    if (booking?.checkOut) return booking.checkOut instanceof Date ? booking.checkOut : new Date(booking.checkOut)
-    return new Date()
-  }, [booking?.check_out_date, booking?.checkOut])
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <p className="text-muted-foreground">載入中...</p>
-      </div>
-    )
+  if (bookingError || !booking) {
+    redirect('/bookings')
   }
 
-  if (!booking) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <p className="text-muted-foreground">找不到預訂資料</p>
-      </div>
-    )
+  // 檢查是否為主住者
+  const isPrimaryGuest = booking.guest_id === user.id
+
+  // 如果不是主住者,檢查是否為同住者
+  if (!isPrimaryGuest) {
+    const { data: sharedCard } = await supabase
+      .from('shared_room_cards')
+      .select('*')
+      .eq('booking_id', id)
+      .eq('invitee_email', user.email)
+      .eq('status', 'accepted')
+      .maybeSingle()
+
+    if (!sharedCard) {
+      redirect('/bookings')
+    }
   }
 
-  // 獲取房源名稱,支援新舊資料格式
-  const propertyName = booking.property?.title || booking.propertyTitle || "房源"
+  // 確保返回的對象是可序列化的，並添加相容性欄位
+  const serializableBooking = JSON.parse(JSON.stringify({
+    ...booking,
+    // 相容性欄位
+    checkIn: booking.check_in_date,
+    checkOut: booking.check_out_date,
+    propertyTitle: booking.property?.title || '',
+    propertyImage: booking.property?.images?.[0] || booking.property?.image_url || '',
+    guestName: booking.guest?.name,
+    guestEmail: booking.guest?.email,
+  }))
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-secondary/30 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-2xl">
-        <Link href="/bookings">
-          <Button variant="ghost" className="mb-6 gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            返回訂單列表
-          </Button>
-        </Link>
-
-        <div className="mb-4 flex items-center gap-2">
-          <h1 className="text-2xl font-bold">{propertyName}</h1>
-          {isPrimaryGuest ? (
-            <Badge variant="default" className="bg-primary text-primary-foreground">
-              主住者
-            </Badge>
-          ) : (
-            <Badge variant="secondary" className="bg-accent text-accent-foreground">
-              同住者
-            </Badge>
-          )}
-        </div>
-
-        <Tabs defaultValue="room-card" className="space-y-6">
-          <TabsList className={`grid w-full ${isPrimaryGuest ? "grid-cols-3" : "grid-cols-2"}`}>
-            <TabsTrigger value="room-card">數位房卡</TabsTrigger>
-            {isPrimaryGuest && <TabsTrigger value="shared-cards">共享房卡管理</TabsTrigger>}
-            <TabsTrigger value="access-logs">開門紀錄</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="room-card">
-            <DigitalRoomCard booking={booking} />
-          </TabsContent>
-
-          {isPrimaryGuest && (
-            <TabsContent value="shared-cards">
-              <SharedRoomCards
-                bookingId={booking.id}
-                propertyName={propertyName}
-                checkIn={checkInDate}
-                checkOut={checkOutDate}
-              />
-            </TabsContent>
-          )}
-
-          <TabsContent value="access-logs">
-            <DoorAccessLogs bookingId={booking.id} viewMode="guest" />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+    <BookingDetailClient
+      booking={serializableBooking}
+      userId={user.id}
+      userEmail={user.email!}
+      isPrimaryGuest={isPrimaryGuest}
+    />
   )
 }

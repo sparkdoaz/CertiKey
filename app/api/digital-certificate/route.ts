@@ -295,7 +295,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { ename: "member_serial", content: booking.guest_id.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20) },
         { ename: "checkin_time", content: formatDateTime(booking.check_in_date) },
         { ename: "checkout_time", content: formatDateTime(booking.check_out_date) },
-        { ename: "booking_id", content: booking.id.replace(/[^a-zA-Z0-9]/g, '').substring(0, 30) },
+        { ename: "booking_id", content: booking.id },
         { ename: "room_num", content: booking.room_number.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10) },
         { ename: "nonce", content: nonce },
         
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ]
     }
 
-    // 驗證欄位內容
+    // 驗證欄位內容並進行數據標準化
     const validation = validateFields(requestData.fields);
     if (!validation.isValid) {
       return NextResponse.json(
@@ -318,6 +318,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       );
     }
+
+    // 使用標準化後的欄位
+    requestData.fields = validation.normalizedFields;
 
     // 驗證日期格式
     const datePattern = /^\d{8}$/;

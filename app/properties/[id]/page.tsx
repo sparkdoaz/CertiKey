@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 import Image from "next/image"
-// import { getPropertyById } from "@/lib/mock-data" // 註解掉 mock 資料
-import { getProperty } from "@/lib/supabase-queries" // 使用 Supabase 查詢
+import { createClient } from "@/utils/supabase/server"
+import { getProperty } from "@/lib/supabase-queries"
 import { BookingForm } from "@/components/booking-form"
 import { Separator } from "@/components/ui/separator"
 import { Star, MapPin, Users, Bed, Bath, Wifi, Wind, Tv, Car } from "lucide-react"
@@ -24,6 +24,10 @@ export default async function PropertyDetailPage({
   if (!property) {
     notFound()
   }
+
+  // 檢查用戶是否登入 (不強制登入,只是傳遞資訊給 BookingForm)
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
   return (
     <div className="min-h-screen bg-background">
@@ -122,7 +126,7 @@ export default async function PropertyDetailPage({
 
           {/* Booking Form */}
           <div className="lg:col-span-1">
-            <BookingForm property={property} />
+            <BookingForm property={property} userId={user?.id} />
           </div>
         </div>
       </div>

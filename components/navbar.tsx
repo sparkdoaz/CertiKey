@@ -1,9 +1,8 @@
-"use client"
-
+// app/components/navbar.tsx
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
+import { createClient } from "@/utils/supabase/server"
+import { signOut } from "@/app/auth/actions"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -13,23 +12,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, LogOut, LayoutDashboard, CreditCard, RefreshCw, DoorOpen } from "lucide-react"
+import { User as UserIcon, LayoutDashboard, CreditCard, DoorOpen } from "lucide-react"
 
-export function Navbar() {
-  const { user, logout, switchRole } = useAuth()
-  const pathname = usePathname()
+export async function Navbar() {
+  const supabase = await createClient()
 
-  const handleSwitchRole = () => {
-    const newRole = user?.role === "guest" ? "host" : "guest"
-    switchRole(newRole)
-  }
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const getRoleBadgeVariant = () => {
-    return user?.role === "host" ? "default" : "secondary"
-  }
-
-  const getRoleLabel = () => {
-    return user?.role === "host" ? "房東" : "房客"
+  let profile = null
+  if (user) {
+    const { data } = await supabase.from("user_profiles").select("*").eq("id", user.id).single()
+    if (data) {
+      profile = {
+        ...user,
+        name: data.name || user.email?.split("@")[0],
+        role: data.role || "guest",
+      }
+    }
   }
 
   return (
@@ -48,11 +47,10 @@ export function Navbar() {
                 智慧門鎖 Demo
               </Button>
             </Link>
-            {/* </CHANGE> */}
 
-            {user ? (
+            {profile ? (
               <>
-                {user.role === "host" && (
+                {profile.role === "host" && (
                   <Link href="/host/dashboard">
                     <Button variant="ghost" size="sm">
                       <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -63,23 +61,21 @@ export function Navbar() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-                      <User className="h-4 w-4" />
-                      <span>{user.name}</span>
-                      <Badge variant={getRoleBadgeVariant()} className="ml-1">
-                        {getRoleLabel()}
+                      <UserIcon className="h-4 w-4" />
+                      <span>{profile.name}</span>
+                      <Badge
+                        variant={profile.role === "host" ? "default" : "secondary"}
+                        className="ml-1"
+                      >
+                        {profile.role === "host" ? "房東" : "房客"}
                       </Badge>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={handleSwitchRole} className="cursor-pointer">
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      切換為{user.role === "guest" ? "房東" : "房客"}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                       <Link href="/profile">個人資料</Link>
                     </DropdownMenuItem>
-                    {user.role === "guest" && (
+                    {profile.role === "guest" && (
                       <>
                         <DropdownMenuItem asChild>
                           <Link href="/bookings">我的訂單</Link>
@@ -92,35 +88,28 @@ export function Navbar() {
                         </DropdownMenuItem>
                       </>
                     )}
-                    {user.role === "host" && (
-                      <DropdownMenuItem asChild>
-                        <Link href="/host/dashboard">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          房東管理面板
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout}>
-                      <LogOut className="mr-2 h-4 w-4" />
-                      登出
+                    <DropdownMenuItem asChild>
+                      <form action={signOut}>
+                        <button type="submit" className="w-full text-left text-destructive">
+                          登出
+                        </button>
+                      </form>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
             ) : (
-              <>
+              <div className="flex items-center gap-2">
                 <Link href="/login">
-                  <Button variant={pathname === "/login" ? "default" : "outline"} size="sm">
+                  <Button variant="ghost" size="sm">
                     登入
                   </Button>
                 </Link>
                 <Link href="/register">
-                  <Button variant={pathname === "/register" ? "default" : "outline"} size="sm">
-                    註冊
-                  </Button>
+                  <Button size="sm">註冊</Button>
                 </Link>
-              </>
+              </div>
             )}
           </div>
         </div>

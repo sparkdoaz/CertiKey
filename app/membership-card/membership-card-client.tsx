@@ -1,60 +1,47 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
-import { getUserMembershipCard, createMembershipCard, updateMembershipCard } from "@/lib/supabase-queries"
+import { createMembershipCard, updateMembershipCard } from "@/lib/supabase-queries"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MembershipCardComponent } from "@/components/membership-card"
 import type { MembershipCard } from "@/types/membership-card"
 import { CreditCard, Plus, AlertCircle } from "lucide-react"
 
-export default function MembershipCardClient() {
+interface MembershipCardClientProps {
+  user: {
+    id: string
+    name: string
+    email: string
+    phone: string
+    nationalId: string
+  }
+  initialMembershipCard: any | null
+}
+
+export default function MembershipCardClient({ user, initialMembershipCard }: MembershipCardClientProps) {
   const router = useRouter()
-  const { user } = useAuth()
-  const [membershipCard, setMembershipCard] = useState<MembershipCard | null>(null)
-  const [isApplying, setIsApplying] = useState(false)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    if (!user) {
-      router.push("/login")
-      return
-    }
-
-    const fetchMembershipCard = async () => {
-      try {
-        setLoading(true)
-        const card = await getUserMembershipCard(user.id)
-
-        if (card) {
-          // 轉換資料格式
-          const formattedCard: MembershipCard = {
-            id: card.id,
-            userId: card.user_id,
-            userName: user.name,
-            userEmail: user.email,
-            userPhone: user.phone,
-            userNationalId: user.nationalId,
-            status: card.status as "pending" | "active" | "expired" | "revoked",
-            qrCodeStatus: "valid",
-            appliedAt: card.created_at,
-            activatedAt: card.activated_at,
-            expiresAt: card.expires_at,
-            cardNumber: card.card_number
-          }
-          setMembershipCard(formattedCard)
-        }
-      } catch (error) {
-        console.error('Failed to fetch membership card:', error)
-      } finally {
-        setLoading(false)
+  const [membershipCard, setMembershipCard] = useState<MembershipCard | null>(() => {
+    if (initialMembershipCard) {
+      return {
+        id: initialMembershipCard.id,
+        userId: initialMembershipCard.user_id,
+        userName: user.name,
+        userEmail: user.email,
+        userPhone: user.phone,
+        userNationalId: user.nationalId,
+        status: initialMembershipCard.status as "pending" | "active" | "expired" | "revoked",
+        qrCodeStatus: "valid",
+        appliedAt: initialMembershipCard.created_at,
+        activatedAt: initialMembershipCard.activated_at,
+        expiresAt: initialMembershipCard.expires_at,
+        cardNumber: initialMembershipCard.card_number
       }
     }
-
-    fetchMembershipCard()
-  }, [user, router])
+    return null
+  })
+  const [isApplying, setIsApplying] = useState(false)
 
   const handleApply = async () => {
     if (!user) return
@@ -115,18 +102,6 @@ export default function MembershipCardClient() {
     } finally {
       setIsApplying(false)
     }
-  }
-
-  if (!user) {
-    return null
-  }
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <p className="text-muted-foreground">載入中...</p>
-      </div>
-    )
   }
 
   return (

@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
 import type { Property } from "@/types/property"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,11 +13,11 @@ import { Calendar, Users } from "lucide-react"
 
 interface BookingFormProps {
   property: Property
+  userId?: string // 從父層 Server Component 傳入
 }
 
-export function BookingForm({ property }: BookingFormProps) {
+export function BookingForm({ property, userId }: BookingFormProps) {
   const router = useRouter()
-  const { user } = useAuth()
   const [checkIn, setCheckIn] = useState("")
   const [checkOut, setCheckOut] = useState("")
   const [guests, setGuests] = useState("2")
@@ -54,7 +53,7 @@ export function BookingForm({ property }: BookingFormProps) {
   const maxGuests = property.guests || property.max_guests || 4
 
   const handleBooking = async () => {
-    if (!user) {
+    if (!userId) {
       router.push("/login")
       return
     }
@@ -66,7 +65,7 @@ export function BookingForm({ property }: BookingFormProps) {
 
     setIsLoading(true)
 
-    // 導航到付款頁面，通過 URL 參數傳遞預訂資訊
+    // 導航到付款頁面,通過 URL 參數傳遞預訂資訊
     const params = new URLSearchParams({
       propertyId: property.id,
       checkIn: checkIn,
@@ -160,10 +159,10 @@ export function BookingForm({ property }: BookingFormProps) {
         )}
 
         <Button onClick={handleBooking} disabled={isLoading || !checkIn || !checkOut} className="w-full" size="lg">
-          {isLoading ? "處理中..." : user ? "預訂" : "登入後預訂"}
+          {isLoading ? "處理中..." : userId ? "預訂" : "登入後預訂"}
         </Button>
 
-        {!user && <p className="text-center text-sm text-muted-foreground">需要登入才能預訂</p>}
+        {!userId && <p className="text-center text-sm text-muted-foreground">需要登入才能預訂</p>}
       </CardContent>
     </Card>
   )

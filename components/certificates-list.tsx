@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAuth } from "@/contexts/auth-context"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/utils/supabase/client"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,10 +25,10 @@ interface CertificateWithUser extends DigitalCertificate {
 
 interface CertificatesListProps {
   bookingId: string
+  userId: string
 }
 
-export function CertificatesList({ bookingId }: CertificatesListProps) {
-  const { user } = useAuth()
+export function CertificatesList({ bookingId, userId }: CertificatesListProps) {
   const [certificates, setCertificates] = useState<CertificateWithUser[]>([])
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<'host' | 'primary_guest' | 'co_guest'>('co_guest')
@@ -41,16 +40,17 @@ export function CertificatesList({ bookingId }: CertificatesListProps) {
   const [revoking, setRevoking] = useState<string | null>(null)
 
   useEffect(() => {
-    if (user) {
+    if (userId) {
       fetchCertificates()
     }
-  }, [bookingId, user])
+  }, [bookingId, userId])
 
   const fetchCertificates = async () => {
-    if (!user) return
+    if (!userId) return
 
     try {
       setLoading(true)
+      const supabase = createClient()
 
       // 獲取 access token
       const { data: { session } } = await supabase.auth.getSession()
@@ -79,10 +79,11 @@ export function CertificatesList({ bookingId }: CertificatesListProps) {
   }
 
   const handleRevoke = async (certificateId: string) => {
-    if (!user) return
+    if (!userId) return
 
     try {
       setRevoking(certificateId)
+      const supabase = createClient()
 
       // 獲取 access token
       const { data: { session } } = await supabase.auth.getSession()

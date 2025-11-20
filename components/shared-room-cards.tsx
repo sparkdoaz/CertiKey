@@ -30,8 +30,7 @@ import type { SharedRoomCard, RoomCardInvitation } from "@/types/booking"
 import type { DigitalCertificate } from "@/types/digital-certificate-record"
 import QRCode from "qrcode"
 import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/contexts/auth-context"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/utils/supabase/client"
 
 interface GuestWithCertificates {
   userId: string | null
@@ -48,9 +47,11 @@ interface SharedRoomCardsProps {
   propertyName: string
   checkIn: Date
   checkOut: Date
+  userId: string
+  userEmail: string
 }
 
-export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut }: SharedRoomCardsProps) {
+export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut, userId, userEmail }: SharedRoomCardsProps) {
   const [guests, setGuests] = useState<GuestWithCertificates[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [guestEmail, setGuestEmail] = useState("")
@@ -60,17 +61,17 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut }: 
   const [resendingCardId, setResendingCardId] = useState<string | null>(null)
   const [revokingCertId, setRevokingCertId] = useState<string | null>(null)
   const { toast } = useToast()
-  const { user } = useAuth()
 
   useEffect(() => {
     loadSharedCards()
   }, [bookingId])
 
   const loadSharedCards = async () => {
-    if (!user) return
+    if (!userId) return
 
     try {
       setLoading(true)
+      const supabase = createClient()
 
       // 1. 查詢訂單資訊(取得主住者)
       const { data: booking, error: bookingError } = await supabase
@@ -189,11 +190,12 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut }: 
   }
 
   const handleInvite = async () => {
-    if (!guestEmail || !user) return
+    if (!guestEmail || !userId) return
 
     setIsSubmitting(true)
 
     try {
+      const supabase = createClient()
       const invitationToken = crypto.randomUUID()
       const invitationLink = `${window.location.origin}/invitations/accept/${invitationToken}`
 
@@ -202,7 +204,7 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut }: 
         .from('shared_room_cards')
         .insert({
           booking_id: bookingId,
-          inviter_id: user.id,
+          inviter_id: userId,
           invitee_email: guestEmail,
           invitee_name: guestName || null,
           status: 'pending',
@@ -228,8 +230,8 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut }: 
           shared_card_id: sharedCard.id,
           booking_id: bookingId,
           property_name: propertyName,
-          inviter_email: user.email,
-          inviter_name: user.name,
+          inviter_email: userEmail,
+          inviter_name: guestName || null,
           invitee_email: guestEmail,
           invitee_name: guestName || null,
           check_in_date: checkIn,
@@ -266,7 +268,7 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut }: 
   }
 
   const handleRevokeCertificate = async (certificateId: string, nonce: string | null) => {
-    if (!user) return
+    if (!userId) return
 
     // 如果沒有 nonce,無法撤銷(舊資料或資料不完整)
     if (!nonce) {
@@ -280,6 +282,7 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut }: 
 
     try {
       setRevokingCertId(certificateId)
+      const supabase = createClient()
 
       // 獲取 access token
       const { data: { session } } = await supabase.auth.getSession()

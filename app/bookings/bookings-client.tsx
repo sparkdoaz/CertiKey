@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
-import { Calendar, Users, QrCode } from "lucide-react"
+import { Calendar, Users, QrCode, Home } from "lucide-react"
 
 interface BookingsClientProps {
   initialBookings: Booking[]
@@ -79,17 +79,26 @@ export function BookingsClient({ initialBookings, error }: BookingsClientProps) 
                     {getStatusBadge(booking.status)}
                   </div>
 
-                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      <span>
-                        {booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("zh-TW") : "未設定"} - {" "}
-                        {booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("zh-TW") : "未設定"}
-                      </span>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        <span>
+                          {booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("zh-TW") : "未設定"} - {" "}
+                          {booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("zh-TW") : "未設定"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Home className="h-4 w-4" />
+                        <span>房號: {booking.room_number || "未分配"}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        <span>{booking.guests} 位住客</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      <span>{booking.guests} 位住客</span>
+                      <span>建立時間: {booking.createdAt ? new Date(booking.createdAt).toLocaleDateString("zh-TW") : "未知"}</span>
                     </div>
                   </div>
                 </div>

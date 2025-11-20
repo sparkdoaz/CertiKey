@@ -31,10 +31,16 @@ function validateEmail(email: string): boolean {
   return pattern.test(email);
 }
 
-// 英文數字和底線驗證 (政府 API 不支援中文)
+// 姓名格式驗證 (允許中文、英文、數字和底線)
 function validateNameFormat(name: string): boolean {
-  const pattern = /^[a-zA-Z0-9_]+$/;
+  const pattern = /^[\u4e00-\u9fa5a-zA-Z0-9_]+$/;
   return pattern.test(name);
+}
+
+// 標題格式驗證 (只允許英文、數字和底線，政府 API 不支援中文)
+function validateTitleFormat(title: string): boolean {
+  const pattern = /^[a-zA-Z0-9_]+$/;
+  return pattern.test(title);
 }
 
 // 大小寫字母和數字驗證
@@ -43,7 +49,16 @@ function validateAlphanumeric(value: string): boolean {
   return pattern.test(value);
 }
 
-// 日期時間格式驗證 (格式: YYYYMMDDTHHMM)
+// 訂單編號驗證 (允許 UUID 格式，包含連字符號)
+function validateBookingId(value: string): boolean {
+  const pattern = /^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$/;
+  return pattern.test(value);
+}
+
+// 訂單編號轉換 (將 UUID 格式轉換為英數字格式)
+function normalizeBookingId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '').substring(0, 30);
+}
 function validateDateTime(dateTime: string): boolean {
   const pattern = /^\d{8}T\d{4}$/;
   if (!pattern.test(dateTime)) return false;
@@ -91,8 +106,8 @@ export const fieldValidationRules: FieldValidationRules = {
   },
   booking_id: {
     required: true,
-    validator: validateAlphanumeric,
-    maxLength: 30
+    validator: validateBookingId,
+    maxLength: 36
   },
   room_num: {
     required: true,
@@ -112,7 +127,7 @@ export const fieldValidationRules: FieldValidationRules = {
   },
   booking_title: {
     required: false,
-    validator: validateNameFormat,
+    validator: validateTitleFormat,
     maxLength: 50
   },
   issued_date: {
@@ -165,7 +180,7 @@ function getFieldErrorMessage(fieldName: string): string {
     member_serial: '會員編號只能包含英文字母和數字',
     checkin_time: '進房時間格式不正確 (格式: YYYYMMDDTHHMM)',
     checkout_time: '退房時間格式不正確 (格式: YYYYMMDDTHHMM)',
-    booking_id: '訂單編號只能包含英文字母和數字',
+    booking_id: '訂單編號格式不正確 (應為 UUID 格式)',
     room_num: '房門號只能包含英文字母和數字',
     nonce: 'Nonce 只能包含英文字母和數字',
     email: '電子郵件格式不正確',
@@ -176,9 +191,10 @@ function getFieldErrorMessage(fieldName: string): string {
   return messages[fieldName] || `${fieldName} 格式不正確`;
 }
 
-// 驗證所有欄位
-export function validateFields(fields: CertificateField[]): { isValid: boolean; errors: string[] } {
+// 驗證所有欄位並進行數據標準化
+export function validateFields(fields: CertificateField[]): { isValid: boolean; errors: string[]; normalizedFields: CertificateField[] } {
   const errors: string[] = [];
+  const normalizedFields: CertificateField[] = [];
   const providedFields = fields.map(f => f.ename);
 
   // 檢查是否所有必填欄位都有提供
@@ -188,27 +204,43 @@ export function validateFields(fields: CertificateField[]): { isValid: boolean; 
     }
   }
 
-  // 驗證每個提供的欄位
+  // 驗證每個提供的欄位並進行標準化
   for (const field of fields) {
-    // 跳過空的非必填欄位
     const rule = fieldValidationRules[field.ename as keyof FieldValidationRules];
     if (!rule) {
       errors.push(`未知的欄位: ${field.ename}`);
       continue;
     }
     
+    // 處理空的非必填欄位
     if (!rule.required && (!field.content || field.content.trim().length === 0)) {
-      continue; // 非必填且為空,跳過驗證
+      normalizedFields.push({ ...field }); // 保持原樣
+      continue;
     }
     
+    // 驗證欄位
     const validation = validateField(field.ename, field.content);
     if (!validation.isValid) {
       errors.push(validation.error!);
+      normalizedFields.push({ ...field }); // 即使驗證失敗也保留原值
+      continue;
     }
+    
+    // 驗證通過，進行數據標準化
+    let normalizedContent = field.content;
+    if (field.ename === 'booking_id') {
+      normalizedContent = normalizeBookingId(field.content);
+    }
+    
+    normalizedFields.push({
+      ...field,
+      content: normalizedContent
+    });
   }
 
   return {
     isValid: errors.length === 0,
-    errors
+    errors,
+    normalizedFields
   };
 }

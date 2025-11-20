@@ -1,7 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Analytics } from "@vercel/analytics/next"
-import { AuthProvider } from "@/contexts/auth-context"
 import { Navbar } from "@/components/navbar"
 import "./globals.css"
 
@@ -22,10 +21,8 @@ export default function RootLayout({
   return (
     <html lang="zh-TW">
       <body className={`font-sans antialiased`}>
-        <AuthProvider>
-          <Navbar />
-          {children}
-        </AuthProvider>
+        <Navbar />
+        {children}
         <Analytics />
       </body>
     </html>

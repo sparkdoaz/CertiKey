@@ -236,13 +236,13 @@ export async function getBooking(bookingId: string) {
     .from('bookings')
     .select('*, property:properties(*), guest:user_profiles(*)')
     .eq('id', bookingId)
-    .single()
+    .maybeSingle()
   
   if (error) throw error
   
   // 轉換資料格式
   if (data) {
-    return {
+    const booking = {
       // 資料庫原始欄位
       id: data.id,
       guest_id: data.guest_id,
@@ -271,9 +271,12 @@ export async function getBooking(bookingId: string) {
       property: data.property,
       guest: data.guest
     }
+    
+    // 確保返回的對象是可序列化的
+    return JSON.parse(JSON.stringify(booking))
   }
   
-  return data
+  return null
 }
 
 export async function getHostBookings(hostId: string) {

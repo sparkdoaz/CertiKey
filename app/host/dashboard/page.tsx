@@ -1,31 +1,43 @@
-import { redirect } from "next/navigation"
-import { getProperties, getHostBookings } from "@/lib/supabase-queries"
+import { requireHost } from "@/lib/auth"
+import { createClient } from "@/utils/supabase/server"
 import type { Property } from "@/types/property"
 import type { Booking } from "@/types/booking"
 import { HostDashboardClient } from "./dashboard-client"
 
 export default async function HostDashboardPage() {
-  // Note: This will need authentication in the real app
-  // For now, we'll show a basic structure
+  const { user } = await requireHost()
+  const supabase = await createClient()
+
   let properties: Property[] = []
   let bookings: Booking[] = []
   let error: string | null = null
 
   try {
-    console.log('🔍 開始載入房東資料...')
-    
-    // In a real app, you would get the current user from authentication
-    // and filter properties and bookings by host ID
-    const allProperties = await getProperties()
-    // const hostProperties = allProperties?.filter(p => p.host_id === user.id) || []
-    properties = allProperties || []
-    
-    // const hostBookings = await getHostBookings(user.id)
-    // bookings = hostBookings || []
-    
-    console.log(`✅ 成功載入 ${properties.length} 個房源，${bookings.length} 個訂單`)
+    // 查詢房東的房源
+    const { data: propertiesData, error: propertiesError } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('host_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (propertiesError) throw propertiesError
+    properties = propertiesData || []
+
+    // 查詢房東的訂單
+    const { data: bookingsData, error: bookingsError } = await supabase
+      .from('bookings')
+      .select(`
+        *,
+        property:properties(*),
+        guest:user_profiles!bookings_guest_id_fkey(*)
+      `)
+      .in('property_id', properties.map(p => p.id))
+      .order('created_at', { ascending: false })
+
+    if (bookingsError) throw bookingsError
+    bookings = bookingsData || []
   } catch (err) {
-    console.error('❌ 載入房東資料失敗:', err)
+    console.error('載入房東資料失敗:', err)
     error = err instanceof Error ? err.message : '載入房東資料失敗'
   }
 
@@ -37,10 +49,10 @@ export default async function HostDashboardPage() {
           <p className="text-muted-foreground">管理您的房源和訂單</p>
         </div>
 
-        <HostDashboardClient 
-          initialProperties={properties} 
-          initialBookings={bookings} 
-          error={error} 
+        <HostDashboardClient
+          initialProperties={properties}
+          initialBookings={bookings}
+          error={error}
         />
       </div>
     </div>

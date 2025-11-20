@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Calendar, Users, AlertTriangle, CheckCircle2, XCircle, Download } from "lucide-react"
 import QRCode from "qrcode"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/utils/supabase/client"
 
 interface DigitalRoomCardProps {
   booking: Booking
@@ -107,6 +107,7 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
   // 查詢 VC 狀態
   const queryVcStatus = async (txId: string) => {
     try {
+      const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
 
@@ -223,6 +224,7 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
     setIsLoading(true)
     try {
       // 獲取當前用戶的 session token
+      const supabase = createClient()
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
       if (sessionError || !session) {
