@@ -41,6 +41,9 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
   })
   const [qrCodeStatus, setQrCodeStatus] = useState<"valid" | "used" | "expired" | "not-ready">("valid")
 
+  // 檢查用戶是否曾經領取過房卡
+  const [hasPreviouslyClaimed, setHasPreviouslyClaimed] = useState(false)
+
   // QR Code 倒數計時 (5 分鐘 = 300 秒)
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
   const [vcStatus, setVcStatus] = useState<"pending" | "claimed" | null>(null)
@@ -103,6 +106,50 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
       }
     }
   }, [timeRemaining, vcStatus])
+
+  // 檢查用戶是否曾經領取過房卡
+  const checkPreviousClaims = async () => {
+    try {
+      console.log('開始檢查用戶領取歷史...')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.user) {
+        console.log('用戶未登入或 session 錯誤:', sessionError)
+        return
+      }
+
+      console.log('用戶已登入, user ID:', session.user.id)
+      console.log('session 用戶完整信息:', session.user)
+
+      // 檢查用戶是否曾經成功領取過有效的房卡 (狀態為 claimed，且未過期)
+      const now = new Date().toISOString()
+      const { data: certificates, error } = await supabase
+        .from('digital_certificates')
+        .select('id, status, expires_at, created_at')
+        .eq('user_id', session.user.id)
+        .eq('status', 'claimed') // 只檢查成功領取的記錄
+        .neq('status', 'revoked') // 排除已撤銷的
+        .gt('expires_at', now) // 排除已過期的
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (error) {
+        console.error('Error checking previous claims:', error)
+        return
+      }
+
+      console.log('查詢結果:', certificates)
+      console.log('證書數量:', certificates?.length || 0)
+
+      // 如果有任何房卡記錄，說明曾經領取過
+      const hasClaimed = certificates && certificates.length > 0
+      console.log('hasPreviouslyClaimed 設置為:', hasClaimed)
+      setHasPreviouslyClaimed(hasClaimed)
+    } catch (error) {
+      console.error('Failed to check previous claims:', error)
+    }
+  }
 
   // 查詢 VC 狀態
   const queryVcStatus = async (txId: string) => {
@@ -179,6 +226,7 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
   }
 
   useEffect(() => {
+    console.log('DigitalRoomCard useEffect 執行, booking:', booking?.id)
     const checkQRCodeValidity = () => {
       const now = new Date()
       const checkInDate = new Date(booking.checkIn || booking.check_in_date)
@@ -228,6 +276,8 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
     }
 
     checkQRCodeValidity()
+    console.log('調用 checkPreviousClaims')
+    checkPreviousClaims() // 檢查用戶是否曾經領取過房卡
   }, [booking])
 
   // 領取房卡 - 調用 API 獲取 QR Code
@@ -429,7 +479,9 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
                 <div className="flex h-64 w-64 items-center justify-center bg-gray-50">
                   <div className="text-center space-y-4">
                     <Download className="mx-auto h-16 w-16 text-gray-400" />
-                    <p className="text-sm text-gray-500">尚未領取房卡</p>
+                    <p className="text-sm text-gray-500">
+                      {hasPreviouslyClaimed ? "再次領取房卡" : "尚未領取房卡"}
+                    </p>
                     <Button
                       onClick={handleClaimCard}
                       disabled={isLoading || qrCodeStatus !== "valid"}
@@ -520,7 +572,10 @@ export function DigitalRoomCard({ booking }: DigitalRoomCardProps) {
           <div className="rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
             {!qrCodeData ? (
               <>
-                <p className="font-medium">請點擊上方按鈕領取數位房卡</p>
+                <p className="font-medium">
+                  {hasPreviouslyClaimed ? "再次領取數位房卡" : "尚未領取數位房卡"}
+                </p>
+                <p className="mt-1">請點擊上方按鈕領取數位房卡</p>
                 <p className="mt-1">領取後即可使用專屬 App 掃描 QR Code</p>
                 <p className="mt-2 text-xs">QR Code 將於退房日期後自動失效</p>
               </>
