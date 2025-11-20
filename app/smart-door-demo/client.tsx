@@ -32,6 +32,7 @@ export function SmartDoorDemoClient({ initialProperty, initialRoom, initialError
   const [qrCodeValue, setQrCodeValue] = useState("")
   const [transactionId, setTransactionId] = useState("")
   const [isPending, startTransition] = useTransition()
+  const [showVideo, setShowVideo] = useState(false)
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -130,6 +131,7 @@ export function SmartDoorDemoClient({ initialProperty, initialRoom, initialError
       setState("idle")
       setCountdown(COUNTDOWN_SECONDS)
       setIsAnimating(false)
+      setShowVideo(false)
     }, 300)
   }
 
@@ -258,7 +260,7 @@ export function SmartDoorDemoClient({ initialProperty, initialRoom, initialError
               </div>
 
               <Button
-                onClick={handleReset}
+                onClick={() => setShowVideo(true)}
                 size="lg"
                 className="mt-4 bg-gradient-to-r from-[oklch(0.75_0.15_45)] to-[oklch(0.65_0.15_35)] text-[oklch(0.15_0.03_260)] hover:opacity-90"
               >
@@ -300,6 +302,20 @@ export function SmartDoorDemoClient({ initialProperty, initialRoom, initialError
           <p>實際使用時會連接真實的門鎖系統</p>
         </div>
       </div>
+
+      {showVideo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+          <video
+            src="/opendoor.mp4"
+            autoPlay
+            onEnded={() => {
+              setShowVideo(false)
+              handleReset()
+            }}
+            className="max-h-full max-w-full"
+          />
+        </div>
+      )}
     </div>
   )
 }
