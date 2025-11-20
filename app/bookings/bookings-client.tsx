@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
-import { Calendar, Users, QrCode, Home } from "lucide-react"
+import { Calendar, Users, QrCode, Home, Lock } from "lucide-react"
 
 interface BookingsClientProps {
   initialBookings: Booking[]
@@ -110,6 +110,12 @@ export function BookingsClient({ initialBookings, error }: BookingsClientProps) 
                     </span>
                   </div>
                   <div className="flex gap-2">
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/smart-door-demo?bookingId=${booking.id}`}>
+                        <Lock className="mr-2 h-4 w-4" />
+                        測試 門鎖測試Demo
+                      </Link>
+                    </Button>
                     <Button asChild variant="outline" size="sm">
                       <Link href={`/bookings/${booking.id}`}>
                         <QrCode className="mr-2 h-4 w-4" />
