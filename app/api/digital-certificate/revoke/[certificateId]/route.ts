@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { revokeCertificate, handleAPIError } from '@/lib/digital-certificate-api';
+import { revokeCertificate, handleAPIError } from '@/lib/issuer-api';
 
 // Supabase 配置
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

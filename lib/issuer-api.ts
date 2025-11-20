@@ -3,11 +3,11 @@
  * 統一處理所有與政府 VC API 的交互
  */
 
-const API_BASE_URL = process.env.DIGITAL_CERTIFICATE_API_URL || 'https://issuer-sandbox.wallet.gov.tw/api';
-const ACCESS_TOKEN = process.env.DIGITAL_CERTIFICATE_ACCESS_TOKEN;
+const API_BASE_URL = process.env.ISSUER_API_URL || 'https://issuer-sandbox.wallet.gov.tw/api';
+const ACCESS_TOKEN = process.env.ISSUER_ACCESS_TOKEN;
 
 if (!ACCESS_TOKEN) {
-  console.warn('DIGITAL_CERTIFICATE_ACCESS_TOKEN is not set');
+  console.warn('ISSUER_ACCESS_TOKEN is not set');
 }
 
 export interface CertificateRequest {
@@ -56,7 +56,7 @@ export interface APIError {
  */
 export async function createCertificate(requestData: CertificateRequest): Promise<CertificateResponse> {
   if (!ACCESS_TOKEN) {
-    throw new Error('DIGITAL_CERTIFICATE_ACCESS_TOKEN is not configured');
+    throw new Error('ISSUER_ACCESS_TOKEN is not configured');
   }
 
   const response = await fetch(`${API_BASE_URL}/qrcode/data`, {
@@ -82,7 +82,7 @@ export async function createCertificate(requestData: CertificateRequest): Promis
  */
 export async function getCertificateStatus(transactionId: string): Promise<VCStatusResult> {
   if (!ACCESS_TOKEN) {
-    throw new Error('DIGITAL_CERTIFICATE_ACCESS_TOKEN is not configured');
+    throw new Error('ISSUER_ACCESS_TOKEN is not configured');
   }
 
   const statusUrl = `${API_BASE_URL}/credential/nonce/${transactionId}`;
@@ -118,7 +118,7 @@ export async function getCertificateStatus(transactionId: string): Promise<VCSta
  */
 export async function revokeCertificate(credentialId: string): Promise<{ credentialStatus: string }> {
   if (!ACCESS_TOKEN) {
-    throw new Error('DIGITAL_CERTIFICATE_ACCESS_TOKEN is not configured');
+    throw new Error('ISSUER_ACCESS_TOKEN is not configured');
   }
 
   const revokeUrl = `${API_BASE_URL}/credential/${credentialId}/revocation`;

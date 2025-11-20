@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CertificateRequest, CertificateResponse, CertificateApiError } from '../../../types/digital-certificate';
 import { validateFields } from '../../../lib/certificate-validation';
 import { createClient } from '@supabase/supabase-js';
-import { createCertificate, handleAPIError } from '../../../lib/digital-certificate-api';
+import { createCertificate, handleAPIError } from '../../../lib/issuer-api';
 
 // Supabase 配置
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

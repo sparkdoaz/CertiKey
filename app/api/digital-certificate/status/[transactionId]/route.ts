@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { VCStatusResponse, ParsedJWTPayload } from '@/types/digital-certificate-record';
-import { getCertificateStatus, handleAPIError, VCStatusResult } from '@/lib/digital-certificate-api';
+import { getCertificateStatus, handleAPIError, VCStatusResult } from '@/lib/issuer-api';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
