@@ -37,7 +37,12 @@ export interface VCStatusError {
   message: string;
 }
 
-export type VCStatusResult = VCStatusResponse | VCStatusError;
+export type VCStatusResult = {
+  credential?: string;
+  error?: string;
+  code?: string;
+  message?: string;
+};
 
 export interface APIError {
   error: string;
@@ -104,29 +109,33 @@ export async function getCertificateStatus(transactionId: string): Promise<VCSta
     throw new Error(`Status query failed: ${errorData.message || response.statusText}`);
   }
 
-  return await response.json();
+  const data = await response.json();
+  return { credential: data.credential };
 }
 
 /**
  * 撤銷憑證
  */
-export async function revokeCertificate(credentialId: string): Promise<void> {
+export async function revokeCertificate(credentialId: string): Promise<{ credentialStatus: string }> {
   if (!ACCESS_TOKEN) {
     throw new Error('DIGITAL_CERTIFICATE_ACCESS_TOKEN is not configured');
   }
 
   const revokeUrl = `${API_BASE_URL}/credential/${credentialId}/revocation`;
   const response = await fetch(revokeUrl, {
-    method: 'POST',
+    method: 'PUT',
     headers: {
+      'Content-Type': 'application/json',
       'Access-Token': ACCESS_TOKEN,
     },
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-    throw new Error(`Certificate revocation failed: ${errorData.message || response.statusText}`);
+    throw errorData; // 拋出 { code, message }
   }
+
+  return await response.json(); // { credentialStatus: "REVOKED" }
 }
 
 /**

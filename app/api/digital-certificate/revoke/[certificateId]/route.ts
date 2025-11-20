@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import {
-  canUserRevokeCertificate,
-  markCertificateAsRevoked,
-} from '@/lib/digital-certificate-queries';
 import { revokeCertificate, handleAPIError } from '@/lib/digital-certificate-api';
 
 // Supabase 配置
@@ -57,24 +53,11 @@ export async function POST(
     }
 
     const { certificateId } = await params;
-
-    // 2. 檢查撤銷權限
-    const { canRevoke, reason } = await canUserRevokeCertificate(
-      user.id,
-      certificateId
-    );
-
-    if (!canRevoke) {
-      return NextResponse.json(
-        { error: `無權限撤銷: ${reason}` },
-        { status: 403 }
-      );
-    }
-
-    // 3. 取得憑證資訊(需要 credential_id)
+    console.log('User', user.id, 'is attempting to revoke certificate', certificateId);
+    // 2. 取得憑證資訊(需要 credential_id)
     const { data: certificate } = await supabase
       .from('digital_certificates')
-      .select('credential_id, credential_jwt, status')
+      .select('id, credential_id, status')
       .eq('id', certificateId)
       .single();
 
@@ -85,6 +68,8 @@ export async function POST(
       );
     }
 
+    console.log('Revoking certificate:', certificate.id, 'Status:', certificate.status);
+
     // 檢查憑證是否已被撤銷
     if (certificate.status === 'revoked') {
       return NextResponse.json(
@@ -92,33 +77,155 @@ export async function POST(
         { status: 400 }
       );
     }
+    console.log('herhe')
+    // 3. 檢查撤銷權限
+    // 取得憑證的完整資訊用於權限檢查
+    const { data: certForPermission } = await supabase
+      .from('digital_certificates')
+      .select('booking_id, user_id, guest_type, status, shared_card_id')
+      .eq('id', certificate.id)
+      .single();
+
+    if (!certForPermission) {
+      return NextResponse.json(
+        { error: '無法取得憑證權限資訊' },
+        { status: 500 }
+      );
+    }
+
+    // 檢查憑證狀態
+    if (certForPermission.status === 'revoked') {
+      return NextResponse.json(
+        { error: '憑證已被撤銷' },
+        { status: 400 }
+      );
+    }
+
+    if (certForPermission.status === 'expired') {
+      return NextResponse.json(
+        { error: '憑證已過期' },
+        { status: 400 }
+      );
+    }
+
+    let canRevoke = false;
+    let reason = '';
+
+    // 1. 檢查是否為房主
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select(`
+        property_id,
+        properties!inner (
+          host_id
+        )
+      `)
+      .eq('id', certForPermission.booking_id)
+      .single();
+
+    if (booking) {
+      const properties = booking.properties as unknown as { host_id: string };
+      if (properties.host_id === user.id) {
+        canRevoke = true;
+        reason = '房主權限';
+      }
+    }
+
+    // 2. 如果不是房主，檢查是否為主住者
+    if (!canRevoke) {
+      const { data: bookingForGuest } = await supabase
+        .from('bookings')
+        .select('guest_id')
+        .eq('id', certForPermission.booking_id)
+        .single();
+
+      if (bookingForGuest && bookingForGuest.guest_id === user.id) {
+        // 是主住者，檢查是否能撤銷此憑證
+        if (certForPermission.guest_type === 'primary' && certForPermission.user_id === user.id) {
+          // 主住者不能撤銷自己的憑證
+          canRevoke = false;
+          reason = '無法撤銷自己的憑證';
+        } else if (certForPermission.guest_type === 'co-guest' && certForPermission.shared_card_id) {
+          // 檢查是否是自己邀請的同住者
+          const { data: sharedCard } = await supabase
+            .from('shared_room_cards')
+            .select('inviter_user_id')
+            .eq('id', certForPermission.shared_card_id)
+            .single();
+
+          if (sharedCard && sharedCard.inviter_user_id === user.id) {
+            canRevoke = true;
+            reason = '主住者撤銷同住者';
+          } else {
+            canRevoke = false;
+            reason = '無權限撤銷此憑證';
+          }
+        } else {
+          canRevoke = false;
+          reason = '無權限撤銷此憑證';
+        }
+      } else {
+        canRevoke = false;
+        reason = '無權限撤銷此憑證';
+      }
+    }
+
+    console.log('Can user', user.id, 'revoke certificate', certificate.id, '?', canRevoke, 'Reason:', reason);
+
+    if (!canRevoke) {
+      return NextResponse.json(
+        { error: `無權限撤銷: ${reason}` },
+        { status: 403 }
+      );
+    }
 
     // 檢查是否有 credential_id (只有 claimed 狀態的憑證才有)
     if (!certificate.credential_id) {
       // 如果憑證還在 pending 狀態(未被掃描),直接標記為撤銷
-      const updatedCertificate = await markCertificateAsRevoked(certificateId);
+      const { data: updatedCertificate, error: updateError } = await supabase
+        .from('digital_certificates')
+        .update({
+          status: 'revoked',
+          revoked_at: new Date().toISOString(),
+        })
+        .eq('id', certificate.id)
+        .select()
+        .single();
+
+      if (updateError || !updatedCertificate) {
+        console.error('Failed to update pending certificate status:', updateError);
+        return NextResponse.json(
+          { error: '更新本地憑證狀態失敗' },
+          { status: 500 }
+        );
+      }
       
       return NextResponse.json({
         success: true,
         message: '憑證已撤銷 (尚未領取)',
         reason,
         certificate: {
-          id: updatedCertificate!.id,
-          status: updatedCertificate!.status,
-          revoked_at: updatedCertificate!.revoked_at,
+          id: updatedCertificate.id,
+          status: updatedCertificate.status,
+          revoked_at: updatedCertificate.revoked_at,
         },
       });
     }
 
-    // 4. 呼叫政府 API 撤銷憑證
-    let apiCallSuccess = false;
+    // 5. 呼叫政府 API 撤銷憑證 (必須成功才更新 DB)
     try {
-      await revokeCertificate(certificate.credential_id);
-      apiCallSuccess = true;
+      const result = await revokeCertificate(certificate.credential_id);
+      // 確認撤銷成功
+      if (result.credentialStatus !== 'REVOKED') {
+        return NextResponse.json(
+          { error: '政府 API 撤銷失敗：狀態不正確' },
+          { status: 500 }
+        );
+      }
     } catch (error) {
       console.error('Government API revoke failed:', error);
 
-      const apiError = handleAPIError({ ok: false, status: 500 } as Response, { message: error instanceof Error ? error.message : 'Unknown error' });
+      const apiError = handleAPIError({ ok: false, status: 500 } as Response, error);
 
       // 處理特定錯誤
       if (apiError.code === '61006') {
@@ -129,44 +236,42 @@ export async function POST(
         );
       }
 
-      // API 呼叫失敗,繼續本地撤銷
-      console.warn('Government API call failed, proceeding with local revocation only');
+      // 政府 API 呼叫失敗,不更新本地 DB
+      return NextResponse.json(
+        { error: '政府 API 撤銷失敗,無法撤銷憑證' },
+        { status: 500 }
+      );
     }
 
-    // 5. 更新本地資料庫狀態
-    const updatedCertificate = await markCertificateAsRevoked(certificateId);
+    // 6. 政府 API 成功後,更新本地資料庫狀態
+    const { data: updatedCertificate, error: updateError } = await supabase
+      .from('digital_certificates')
+      .update({
+        status: 'revoked',
+        revoked_at: new Date().toISOString(),
+      })
+      .eq('id', certificate.id)
+      .select()
+      .single();
 
-    if (!updatedCertificate) {
+    if (updateError || !updatedCertificate) {
+      console.error('Failed to update certificate status:', updateError);
       return NextResponse.json(
         { error: '更新本地憑證狀態失敗' },
         { status: 500 }
       );
     }
 
-    if (apiCallSuccess) {
-      return NextResponse.json({
-        success: true,
-        message: '憑證已撤銷',
-        reason,
-        certificate: {
-          id: updatedCertificate.id,
-          status: updatedCertificate.status,
-          revoked_at: updatedCertificate.revoked_at,
-        },
-      });
-    } else {
-      return NextResponse.json({
-        success: true,
-        message: '憑證已在本地撤銷 (政府 API 呼叫失敗)',
-        reason,
-        warning: '無法同步至政府系統,請稍後重試',
-        certificate: {
-          id: updatedCertificate.id,
-          status: updatedCertificate.status,
-          revoked_at: updatedCertificate.revoked_at,
-        },
-      });
-    }
+    return NextResponse.json({
+      success: true,
+      message: '憑證已撤銷',
+      reason,
+      certificate: {
+        id: updatedCertificate.id,
+        status: updatedCertificate.status,
+        revoked_at: updatedCertificate.revoked_at,
+      },
+    });
   } catch (error) {
     console.error('Error revoking certificate:', error);
     return NextResponse.json(

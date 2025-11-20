@@ -267,18 +267,8 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut, us
     }
   }
 
-  const handleRevokeCertificate = async (certificateId: string, nonce: string | null) => {
+  const handleRevokeCertificate = async (certificateId: string) => {
     if (!userId) return
-
-    // 如果沒有 nonce,無法撤銷(舊資料或資料不完整)
-    if (!nonce) {
-      toast({
-        title: "無法撤銷",
-        description: "此憑證缺少識別資訊,無法撤銷",
-        variant: "destructive",
-      })
-      return
-    }
 
     try {
       setRevokingCertId(certificateId)
@@ -295,17 +285,13 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut, us
         return
       }
 
-      // 呼叫新的撤銷 API (使用 nonce)
-      const response = await fetch('/api/digital-certificate/revoke-by-nonce', {
+      // 呼叫撤銷 API (使用 certificateId)
+      const response = await fetch(`/api/digital-certificate/revoke/${certificateId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          bookingId,
-          nonce,
-        }),
       })
 
       if (response.ok) {
@@ -519,8 +505,8 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut, us
                             {getCertificateStatusBadge(cert.status)}
                           </div>
 
-                          {/* 撤銷按鈕 - 只顯示在可撤銷的憑證上 */}
-                          {cert.status !== 'revoked' && cert.status !== 'expired' && guest.guestType !== 'primary' && (
+                          {/* 撤銷按鈕 - 只顯示在可撤銷的憑證上 TODO: 之後要改成主住者可以revoke自己和同住者的，同住者只能revoke自己的*/}
+                          {cert.status !== 'revoked' && cert.status !== 'expired' && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -543,7 +529,7 @@ export function SharedRoomCards({ bookingId, propertyName, checkIn, checkOut, us
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>取消</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => handleRevokeCertificate(cert.id, cert.nonce)}
+                                    onClick={() => handleRevokeCertificate(cert.id)}
                                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                   >
                                     確認撤銷
