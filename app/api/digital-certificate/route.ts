@@ -270,7 +270,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // 組裝 API 請求資料 (依照新版規格)
     const requestData: CertificateRequest = {
       vcUid: `00000000_certikey_2`,
-      issuanceDate: formatDate(booking.check_in_date),
+      issuanceDate: getIssuedDate(), // 使用當前日期作為發行日期，不能是未來時間
       expiredDate: formatDate(booking.check_out_date),
       fields: [
         // 基本欄位 - 必填

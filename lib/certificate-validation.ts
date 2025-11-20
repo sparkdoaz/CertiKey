@@ -1,31 +1,10 @@
 import { FieldValidationRules, CertificateField } from '../types/digital-certificate';
 
-// 台灣身分證字號驗證
+// 台灣身分證字號驗證 (只檢查基本格式，不進行檢核碼驗證)
 function validateTaiwanId(id: string): boolean {
   const pattern = /^[A-Z][12]\d{8}$/;
-  if (!pattern.test(id)) return false;
-
-  // 身分證字號檢核邏輯
-  const letterValue: { [key: string]: number } = {
-    A: 10, B: 11, C: 12, D: 13, E: 14, F: 15, G: 16, H: 17, I: 34, J: 18,
-    K: 19, L: 20, M: 21, N: 22, O: 35, P: 23, Q: 24, R: 25, S: 26, T: 27,
-    U: 28, V: 29, W: 32, X: 30, Y: 31, Z: 33
-  };
-
-  const letter = id.charAt(0);
-  const digits = id.substring(1);
-  
-  let sum = Math.floor(letterValue[letter] / 10) + (letterValue[letter] % 10) * 9;
-  
-  for (let i = 0; i < 8; i++) {
-    sum += parseInt(digits.charAt(i)) * (8 - i);
-  }
-  
-  const checkDigit = parseInt(digits.charAt(8));
-  return (sum + checkDigit) % 10 === 0;
-}
-
-// 電子郵件格式驗證
+  return pattern.test(id);
+}// 電子郵件格式驗證
 function validateEmail(email: string): boolean {
   const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return pattern.test(email);
@@ -140,7 +119,7 @@ export const fieldValidationRules: FieldValidationRules = {
 // 驗證單一欄位
 export function validateField(fieldName: string, content: string): { isValid: boolean; error?: string } {
   const rule = fieldValidationRules[fieldName as keyof FieldValidationRules];
-  
+
   if (!rule) {
     return { isValid: false, error: `未知的欄位: ${fieldName}` };
   }
