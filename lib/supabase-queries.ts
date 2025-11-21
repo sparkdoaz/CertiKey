@@ -397,59 +397,6 @@ export async function updateBooking(id: string, updates: any) {
   return data
 }
 
-// Door Access Logs functions
-export async function getDoorAccessLogs(propertyId: string) {
-  const { data, error } = await supabase
-    .from('door_access_logs')
-    .select('*, user:user_profiles(*), booking:bookings(*)')
-    .eq('property_id', propertyId)
-    .order('access_time', { ascending: false })
-  
-  if (error) throw error
-  return data
-}
-
-export async function getDoorAccessLogsByUser(userId: string) {
-  const { data, error } = await supabase
-    .from('door_access_logs')
-    .select('*, property:properties(*), booking:bookings(*)')
-    .eq('user_id', userId)
-    .order('access_time', { ascending: false })
-  
-  if (error) throw error
-  return data
-}
-
-export async function getDoorAccessLogsByBooking(bookingId: string) {
-  const { data, error } = await supabase
-    .from('door_access_logs')
-    .select('*, user:user_profiles(*), property:properties(*)')
-    .eq('booking_id', bookingId)
-    .order('access_time', { ascending: false })
-  
-  if (error) throw error
-  return data
-}
-
-export async function createDoorAccessLog(accessLog: {
-  user_id: string
-  property_id: string
-  booking_id?: string
-  access_type: string
-  access_method: string
-  status: string
-  location?: string
-}) {
-  const { data, error } = await supabase
-    .from('door_access_logs')
-    .insert(accessLog)
-    .select('*, property:properties(*)')
-    .single()
-  
-  if (error) throw error
-  return data
-}
-
 // Membership Cards functions
 export async function getUserMembershipCard(userId: string) {
   const { data, error } = await supabase

@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Clock, Lock, LockOpen, AlertCircle, CheckCircle, Smartphone, MapPin } from "lucide-react"
 // import { mockDoorAccessLogs } from "@/lib/mock-data" // 註解掉 mock 資料
-import { getDoorAccessLogs } from "@/lib/supabase-queries" // 使用 Supabase 查詢
 
 interface DoorAccessLogsProps {
   bookingId: string
@@ -22,23 +21,30 @@ export function DoorAccessLogs({ bookingId, viewMode = "guest" }: DoorAccessLogs
     async function loadDoorAccessLogs() {
       try {
         setLoading(true)
-        // 從 Supabase 載入開門記錄
-        const { getDoorAccessLogsByBooking } = await import('@/lib/supabase-queries')
-        const data = await getDoorAccessLogsByBooking(bookingId)
+ 
+        // 使用 API 路由獲取門禁記錄（繞過 RLS）
+        const response = await fetch(`/api/door-access-logs?bookingId=${bookingId}`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch door access logs')
+        }
+        const data = await response.json()
+
+        console.log('載入的開門記錄原始資料:', data)
 
         // 轉換資料格式
         const formattedLogs: DoorAccessLog[] = (data || []).map(log => ({
           id: log.id,
           bookingId: log.booking_id,
           userId: log.user_id,
-          propertyId: log.property_id,
+          propertyId: log.booking?.id,
           timestamp: new Date(log.access_time),
-          accessType: log.access_type as "entry" | "exit",
-          accessMethod: log.access_method as "qr-code" | "digital-key" | "physical-key",
-          status: log.status as "success" | "failed" | "denied",
-          location: log.location,
-          deviceId: log.device_id,
-          userName: log.user?.name
+          action: 'unlock', // 簡化，預設都是開門動作
+          status: (log.status === 'denied' ? 'failed' : 'success') as "success" | "failed",
+          failureReason: log.status === 'denied' ? '驗證失敗' : undefined,
+          deviceInfo: log.transaction_id,
+          location: undefined, // 移除，因為表中沒有這個欄位
+          userName: log.user?.name || `用戶 ${log.user_id?.slice(0, 8)}` || '未知用戶',
+          propertyTitle: log.booking?.property?.title || '未知房源'
         }))
 
         setLogs(formattedLogs)
@@ -138,12 +144,10 @@ export function DoorAccessLogs({ bookingId, viewMode = "guest" }: DoorAccessLogs
                       <p className="text-xs text-muted-foreground">{formatTimestamp(log.timestamp)}</p>
                     </div>
 
-                    {viewMode === "host" && (
-                      <p className="text-sm">
-                        <span className="text-muted-foreground">房客：</span>
-                        {log.userName}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">開門者：</span>
+                      <span className="font-medium">{log.userName}</span>
+                    </div>
 
                     {log.failureReason && (
                       <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-2 text-sm text-destructive">
