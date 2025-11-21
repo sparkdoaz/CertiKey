@@ -6,6 +6,12 @@ import { redirect } from 'next/navigation'
 
 export type UserRole = 'guest' | 'host'
 
+// 生成短 ID 函數
+function generateShortId(): string {
+  // 生成 12 字符的隨機短 ID（大寫英數字）
+  return Math.random().toString(36).substring(2, 14).toUpperCase()
+}
+
 export async function signup(formData: FormData) {
   const supabase = await createClient()
 
@@ -67,6 +73,7 @@ export async function signup(formData: FormData) {
       email,
       name,
       role,
+      short_id: generateShortId(),
     })
 
   if (profileError) {

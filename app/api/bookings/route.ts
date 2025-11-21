@@ -128,6 +128,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 生成短 ID
+    const shortId = Math.random().toString(36).substring(2, 14).toUpperCase()
+
     // 使用資料庫交易確保房間分配的原子性
     const { data: bookingData, error: bookingError } = await supabase.rpc('create_booking_with_room_assignment', {
       p_guest_id: guest_id,
@@ -136,7 +139,8 @@ export async function POST(request: NextRequest) {
       p_check_out_date: check_out_date,
       p_guests: guests,
       p_total_price: total_price,
-      p_status: status
+      p_status: status,
+      p_short_id: shortId
     })
 
     if (bookingError) {

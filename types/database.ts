@@ -6,6 +6,7 @@ export interface UserProfile {
   phone?: string
   national_id?: string
   national_id_verified?: boolean
+  short_id?: string
   created_at: string
   updated_at: string
 }
@@ -41,6 +42,7 @@ export interface Booking {
   total_price: number
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
   special_requests?: string
+  short_id?: string
   created_at: string
   updated_at: string
   property?: Property

@@ -260,8 +260,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       
-      // 取後 4 個字元並轉為大寫(確保只有英數字)
-      return hashHex.slice(-4).toUpperCase();
+      // 取前 30 個字元並轉為大寫(確保只有英數字)
+      return hashHex.slice(0, 30).toUpperCase();
     };
 
     // 生成 nonce (儲存以便後續撤銷時識別)
@@ -278,10 +278,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { ename: "name", content: (booking.guest.name || "Guest").replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '') },
         
         // 自定義欄位 - 必填
-        { ename: "member_serial", content: booking.guest_id.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20) },
+        { ename: "member_serial", content: booking.guest?.short_id || "UNKNOWN" },
         { ename: "checkin_time", content: formatDateTime(booking.check_in_date) },
         { ename: "checkout_time", content: formatDateTime(booking.check_out_date) },
-        { ename: "booking_id", content: booking.id },
+        { ename: "booking_id", content: booking.short_id || "UNKNOWN" },
         { ename: "room_num", content: booking.room_number.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10) },
         { ename: "nonce", content: nonce },
         
