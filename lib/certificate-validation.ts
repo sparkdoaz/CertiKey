@@ -28,16 +28,12 @@ function validateAlphanumeric(value: string): boolean {
   return pattern.test(value);
 }
 
-// 訂單編號驗證 (允許 UUID 格式，包含連字符號)
+// 訂單編號驗證 (short_id 格式：英數字組合，長度 1-30)
 function validateBookingId(value: string): boolean {
-  const pattern = /^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$/;
+  const pattern = /^[a-zA-Z0-9]{1,30}$/;
   return pattern.test(value);
 }
 
-// 訂單編號轉換 (將 UUID 格式轉換為英數字格式)
-function normalizeBookingId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9]/g, '').substring(0, 30);
-}
 function validateDateTime(dateTime: string): boolean {
   const pattern = /^\d{8}T\d{4}$/;
   if (!pattern.test(dateTime)) return false;
@@ -86,7 +82,7 @@ export const fieldValidationRules: FieldValidationRules = {
   booking_id: {
     required: true,
     validator: validateBookingId,
-    maxLength: 36
+    maxLength: 30
   },
   room_num: {
     required: true,
@@ -159,7 +155,7 @@ function getFieldErrorMessage(fieldName: string): string {
     member_serial: '會員編號只能包含英文字母和數字',
     checkin_time: '進房時間格式不正確 (格式: YYYYMMDDTHHMM)',
     checkout_time: '退房時間格式不正確 (格式: YYYYMMDDTHHMM)',
-    booking_id: '訂單編號格式不正確 (應為 UUID 格式)',
+    booking_id: '訂單編號格式不正確 (應為 1-30 位英數字)',
     room_num: '房門號只能包含英文字母和數字',
     nonce: 'Nonce 只能包含英文字母和數字',
     email: '電子郵件格式不正確',
@@ -206,11 +202,8 @@ export function validateFields(fields: CertificateField[]): { isValid: boolean; 
     }
     
     // 驗證通過，進行數據標準化
-    let normalizedContent = field.content;
-    if (field.ename === 'booking_id') {
-      normalizedContent = normalizeBookingId(field.content);
-    }
-    
+    let normalizedContent = field.content
+  
     normalizedFields.push({
       ...field,
       content: normalizedContent
