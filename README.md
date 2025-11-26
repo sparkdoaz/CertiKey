@@ -65,3 +65,7 @@
 >
 > - 所有測試帳號的密碼都是 `demo123456`
 > - Email 已自動驗證，可直接登入
+
+### License
+CertiKey is **[MIT licensed](https://github.com/sparkdoaz/CertiKey/blob/main/LICENSE)**.
+
