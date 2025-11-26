@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { randomBytes } from 'crypto'
 
 // 使用 service role key 來繞過 RLS 限制
 const supabase = createClient(
@@ -128,8 +129,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 生成短 ID
-    const shortId = Math.random().toString(36).substring(2, 14).toUpperCase()
+    // 以密碼學安全亂數產生短 ID
+    const shortId = randomBytes(12).toString('hex').substring(2, 14).toUpperCase();
 
     // 使用資料庫交易確保房間分配的原子性
     const { data: bookingData, error: bookingError } = await supabase.rpc('create_booking_with_room_assignment', {

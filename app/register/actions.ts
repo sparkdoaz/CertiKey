@@ -3,13 +3,14 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { randomBytes } from 'crypto'
 
 export type UserRole = 'guest' | 'host'
 
 // 生成短 ID 函數
 function generateShortId(): string {
-  // 生成 12 字符的隨機短 ID（大寫英數字）
-  return Math.random().toString(36).substring(2, 14).toUpperCase()
+  // 以密碼學安全亂數產生 12 字符的隨機短 ID（大寫英數字）
+  return randomBytes(12).toString('hex').substring(2, 14).toUpperCase();
 }
 
 export async function signup(formData: FormData) {
